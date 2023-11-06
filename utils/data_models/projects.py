@@ -2,7 +2,7 @@ from typing import Dict, List
 from pydantic import BaseModel, Extra
 
 from utils.data_models.formdata import MainCategories
-from utils.data_models.budgets import Divisions, CurrentActuals, ChangeOrderActuals
+from utils.data_models.budgets import Divisions, CurrentActuals, CurrentActualsV2, ChangeOrderActuals, ChangeOrderActualsV2
 from utils.data_models.invoices import ChangeOrderObject
 
 
@@ -125,10 +125,26 @@ class BillSummary(BaseModel):
     invoiceIds: List[str] | None
 
 
+class InvoiceCurrentActualsV2(BaseModel):
+    __root__: Dict[str, CurrentActualsV2]
+
+
+class InvoiceChangeOrderCurrentActualsV2(BaseModel):
+    __root__: Dict[str, ChangeOrderActualsV2]
+
+class GroupedInvoiceActualsV2(BaseModel):
+    invoice: InvoiceCurrentActualsV2
+    laborFee: InvoiceCurrentActualsV2
+
+
+class ClientBillDataV2(BaseModel):
+    actuals: GroupedInvoiceActualsV2
+    actualsChangeOrders: InvoiceChangeOrderCurrentActualsV2
+    
 class AddClientBillData(BaseModel):
     invoiceIds: List[str] | None
     laborIds: List[str] | None
     clientBillSummary: BillSummary | None
-    currentActuals: CurrentActuals | None
-    currentActualsChangeOrders: ChangeOrderActuals | None
-    clientBillObj: ClientBillData | None
+    currentActuals: CurrentActualsV2 | None
+    currentActualsChangeOrders: ChangeOrderActuals | ChangeOrderActualsV2 | None
+    clientBillObj: ClientBillDataV2 | None

@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 from pydantic import BaseModel
 
 
@@ -96,3 +96,26 @@ class CurrentActuals(BaseModel):
 
 class ChangeOrderActuals(BaseModel):
     __root__: Dict[str, CurrentActuals]
+
+class ActualsItemV2(BaseModel):
+    changeOrder: Optional[str] = None
+    costCodeName: str
+    description: Optional[str] = None
+    recursiveLevel: Optional[List[int]] = None
+    # division: float
+    # divisionName: str
+    # subDivision: float
+    # subDivisionName: str
+    qtyAmt: Optional[str] = None
+    rateAmt: Optional[str] = None
+    totalAmt: str
+    vendor: str
+    group: str
+    invoiceIds: Optional[List[str]] = None
+    laborFeeIds: Optional[List[str]] = None
+
+class CurrentActualsV2(BaseModel):
+    __root__: Dict[str, ActualsItemV2]
+
+class ChangeOrderActualsV2(BaseModel):
+    __root__: Dict[str, CurrentActualsV2]

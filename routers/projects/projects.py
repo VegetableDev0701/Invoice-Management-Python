@@ -8,7 +8,7 @@ from validation import io_validation
 from config import PROJECT_NAME
 from utils import auth
 from utils.data_models.projects import FullProjectDataToAdd
-from utils.data_models.charts import FullB2AData
+from utils.data_models.charts import FullB2AData, FullB2ADataV2
 from utils.database.firestore import (
     get_all_project_details_data,
     push_to_firestore,
@@ -322,7 +322,7 @@ async def delete_project(
 async def add_project_b2a_chart_data(
     company_id: str,
     project_id: str,
-    data: FullB2AData,
+    data: FullB2ADataV2,
     #current_user=Depends(auth.get_current_user),
 ) -> dict:
     #auth.check_user_data(company_id=company_id, current_user=current_user)
