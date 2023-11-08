@@ -2,6 +2,7 @@ import asyncio
 import itertools
 import logging
 import traceback
+import re
 
 import gcsfs
 from google.cloud import firestore, storage
@@ -15,7 +16,7 @@ from global_vars.globals_io import (
     RAW_DOCS_UNPROCESSED_INVOICE_PATH,
     MESSAGE_STREAM_DELAY,
 )
-from config import PROJECT_NAME
+from config import CUSTOMER_DOCUMENT_BUCKET, PROJECT_NAME
 
 logging.basicConfig(level=logging.INFO)
 
@@ -25,7 +26,7 @@ bucket = client.get_bucket("stak-customer-documents")
 router = APIRouter()
 
 
-fs = gcsfs.GCSFileSystem()
+# fs = gcsfs.GCSFileSystem()
 
 
 @router.websocket("/{company_id}/listen-invoice-updates")
@@ -35,13 +36,14 @@ async def listen_to_firestore_invoice_ws(
     token: str,
 ):
     # Authenticate the user
-    #current_user = await auth.get_current_user(auth0=f"Bearer {token}")
+    current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
-    fs = gcsfs.GCSFileSystem()
+    storage_client = storage.Client(project=PROJECT_NAME)
+    bucket = storage_client.get_bucket(bucket_or_name=CUSTOMER_DOCUMENT_BUCKET)
 
     try:
         await websocket.accept()
@@ -86,7 +88,6 @@ async def listen_to_firestore_invoice_ws(
             if len(list(new_docs.keys())) > 0:
                 for doc_id, doc_data in new_docs.items():
                     initial_docs[doc_id] = doc_data
-
                     del doc_data["full_document_text"]
                     del doc_data["entities"]
                     new_updated_docs[doc_id] = doc_data
@@ -98,22 +99,27 @@ async def listen_to_firestore_invoice_ws(
                 invoice_sub_dirs = get_sub_dirs(
                     client, prefix=f"{company_id}/{RAW_DOCS_UNPROCESSED_INVOICE_PATH}"
                 )
-                numFilesLeft = len(
-                    list(
-                        itertools.chain.from_iterable(
-                            [
-                                fs.ls(
-                                    f"stak-customer-documents/{company_id}/raw-documents/unprocessed/invoice/{sub_dir}"
+                num_files_left = len(
+                    [
+                        blob.name
+                        for blobs in [
+                            list(
+                                bucket.list_blobs(
+                                    prefix=f"{company_id}/raw-documents/unprocessed/invoice/{sub_dir}"
                                 )
-                                for sub_dir in invoice_sub_dirs
-                            ]
-                        )
-                    )
+                            )
+                            for sub_dir in invoice_sub_dirs
+                        ]
+                        for blob in blobs
+                        if re.search(r".pdf$", blob.name)
+                    ]
                 )
             except FileNotFoundError:
-                numFilesLeft = 0
+                num_files_left = 0
 
-            if numFilesLeft == 0:  # or not logging_doc.to_dict()["is_processing_docs"]:
+            if (
+                num_files_left == 0
+            ):  # or not logging_doc.to_dict()["is_processing_docs"]:
                 # Make sure all documents get sent to the front end on completion
 
                 current_docs = {
@@ -152,8 +158,8 @@ async def listen_to_firestore_invoice_ws(
 
     finally:
         db.close()
-        if fs.session:
-            await fs.session.close()
+        storage_client.close()
+        # fs.close_session(loop=fs._loop, session=fs._session)
         await websocket.close()
 
 
@@ -165,13 +171,14 @@ async def listen_to_firestore_contract(
     PROJECT_NAME: str,
 ):
     # Authenticate the user
-    #current_user = await auth.get_current_user(auth0=f"Bearer {token}")
+    current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
-    fs = gcsfs.GCSFileSystem()
+    storage_client = storage.Client(project=PROJECT_NAME)
+    bucket = storage_client.get_bucket(bucket_or_name=CUSTOMER_DOCUMENT_BUCKET)
 
     try:
         await websocket.accept()
@@ -238,21 +245,24 @@ async def listen_to_firestore_contract(
                     prefix=f"{company_id}/projects/{PROJECT_NAME}/contracts/{RAW_DOCS_UNPROCESSED_INVOICE_PATH}",
                 )
 
-                numFilesLeft = len(
-                    list(
-                        itertools.chain.from_iterable(
-                            [
-                                fs.ls(
-                                    f"stak-customer-documents/{company_id}/projects/{PROJECT_NAME}/contracts/raw-documents/unprocessed/{sub_dir}"
+                num_files_left = len(
+                    [
+                        blob.name
+                        for blobs in [
+                            list(
+                                bucket.list_blobs(
+                                    prefix=f"{company_id}/raw-documents/unprocessed/invoice/{sub_dir}"
                                 )
-                                for sub_dir in contract_sub_dirs
-                            ]
-                        )
-                    )
+                            )
+                            for sub_dir in contract_sub_dirs
+                        ]
+                        for blob in blobs
+                        if re.search(r".pdf$", blob.name)
+                    ]
                 )
             except FileNotFoundError:
-                numFilesLeft = 0
-            if numFilesLeft == 0 and not logging_doc.to_dict()["is_processing_docs"]:
+                num_files_left = 0
+            if num_files_left == 0 and not logging_doc.to_dict()["is_processing_docs"]:
                 # I haven't had the same issue with invoices, where they don't all show up
                 # after getting processed with contracts, but will leave this here, in case that
                 # issue comes up again
@@ -281,8 +291,7 @@ async def listen_to_firestore_contract(
 
     finally:
         db.close()
-        if fs.session:
-            await fs.session.close()
+        storage_client.close()
         await websocket.close()
 
 
@@ -293,10 +302,10 @@ async def listen_to_firestore_invoices(
     token: str,
 ):
     # Authenticate the user
-    #current_user = await auth.get_current_user(auth0=f"Bearer {token}")
+    current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
 
@@ -351,10 +360,10 @@ async def listen_to_firestore_client_bill(
     token: str,
 ):
     # Authenticate the user
-    #current_user = await auth.get_current_user(auth0=f"Bearer {token}")
+    current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
 
@@ -410,10 +419,10 @@ async def listen_to_firestore_client_bill(
     token: str,
 ):
     # Authenticate the user
-    #current_user = await auth.get_current_user(auth0=f"Bearer {token}")
+    current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
 

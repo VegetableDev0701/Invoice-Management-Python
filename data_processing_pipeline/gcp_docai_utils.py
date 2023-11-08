@@ -217,24 +217,30 @@ async def process_and_move_invoices(
 
         doc_dict, img_hex_list = await create_document_object(document, doc_id=uuid)
 
-        project_prediction_results = await make_project_prediction(
-            doc_dict,
-            project_docs,
-            match_customer_patterns_list=Config.MATCH_CUSTOMER_REGEX,
-            address_choices=pred_config.address_choices,
-            owner_choices=pred_config.owner_choices,
-            model=pred_config.model,
-            doc_emb=pred_config.doc_emb,
-        )
-        if is_testing and project_id_for_testing:
-            destination_prefix = (
-                f"{company_id}/processed-documents/test/{project_id_for_testing}/{uuid}"
+        # Check if there are any projects at all, if not `project_docs = {}`
+        if project_docs:
+            project_prediction_results = await make_project_prediction(
+                doc_dict,
+                project_docs,
+                match_customer_patterns_list=Config.MATCH_CUSTOMER_REGEX,
+                address_choices=pred_config.address_choices,
+                owner_choices=pred_config.owner_choices,
+                model=pred_config.model,
+                doc_emb=pred_config.doc_emb,
             )
-            # destination_prefix = f"{company_id}/processed-documents/{uuid}"
         else:
-            # destination_prefix = f"{company_id}/processed-documents/{project_prediction_results['address_id']}/current/{uuid}"
-            destination_prefix = f"{company_id}/processed-documents/{uuid}"
+            project_prediction_results = {
+                "name": None,
+                "value": None,
+                "score": None,
+                "top_scores": None,
+                "uuid": None,
+            }
 
+        # Having project_id included was a legacy idea where the user could choose which project
+        # the invoice was being uploaded for. This was deprecated and the user cannot choose which project
+        # an invoice is being uploaded for. This became too complicated, so the else clause will actually
+        # never get hit...but still too afraid to delete this code :)
         if not project_id:
             doc_dict["predicted_project"] = project_prediction_results
             doc_dict["project"] = {
@@ -256,6 +262,15 @@ async def process_and_move_invoices(
                 document_name="project-summary",
                 project_id=project_id,
             )
+
+        if is_testing and project_id_for_testing:
+            destination_prefix = (
+                f"{company_id}/processed-documents/test/{project_id_for_testing}/{uuid}"
+            )
+            # destination_prefix = f"{company_id}/processed-documents/{uuid}"
+        else:
+            # destination_prefix = f"{company_id}/processed-documents/{project_prediction_results['address_id']}/current/{uuid}"
+            destination_prefix = f"{company_id}/processed-documents/{uuid}"
 
         doc_dict["gcs_uri"] = f"{destination_prefix}/{filename}"
 

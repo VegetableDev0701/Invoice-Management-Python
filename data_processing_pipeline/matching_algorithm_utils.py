@@ -324,6 +324,8 @@ async def get_matches_from_document(
                 address_matches = address_matches[0]
             else:
                 address_matches = ""
+        else:
+            address_matches = ""
         if owner_choices:
             owner_matches = await asyncio.to_thread(
                 process.extractOne,
@@ -335,6 +337,8 @@ async def get_matches_from_document(
                 owner_matches = owner_matches[0]
             else:
                 owner_matches = ""
+        else:
+            owner_choices = ""
 
     else:
         address_matches = await get_matched_patterns_regex(
