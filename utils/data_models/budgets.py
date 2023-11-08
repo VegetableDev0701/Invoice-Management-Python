@@ -12,7 +12,7 @@ class SubItems(BaseModel):
     required: bool
     type: str
     value: str
-    subItems: List['SubItems']
+    subItems: List["SubItems"]
 
 
 class Divisions(BaseModel):
@@ -97,6 +97,7 @@ class CurrentActuals(BaseModel):
 class ChangeOrderActuals(BaseModel):
     __root__: Dict[str, CurrentActuals]
 
+
 class ActualsItemV2(BaseModel):
     changeOrder: Optional[str] = None
     costCodeName: str
@@ -114,8 +115,10 @@ class ActualsItemV2(BaseModel):
     invoiceIds: Optional[List[str]] = None
     laborFeeIds: Optional[List[str]] = None
 
+
 class CurrentActualsV2(BaseModel):
     __root__: Dict[str, ActualsItemV2]
+
 
 class ChangeOrderActualsV2(BaseModel):
     __root__: Dict[str, CurrentActualsV2]
