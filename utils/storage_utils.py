@@ -1,14 +1,19 @@
 import asyncio
 from functools import partial
 import json
+import pathlib
 import re
 import os
+import shutil
+import tempfile
 
 import cv2
 import gcsfs
 from google.cloud import storage
 import numpy as np
 
+from utils.database.firestore import push_to_firestore
+from config import PROJECT_NAME
 from global_vars import globals_io
 
 
@@ -250,3 +255,42 @@ async def save_doc_dict_async(doc_dict: dict, destination: str):
         blob.upload_from_string, json.dumps(doc_dict), content_type="application/json"
     )
     await loop.run_in_executor(None, upload_func)
+
+
+async def download_and_onboard_new_company_files(company_id: str):
+    storage_client = storage.Client()
+    bucket = storage_client.get_bucket("stak-company-files")
+
+    tasks = []
+    blobs = bucket.list_blobs(prefix="data/")
+
+    base_kwargs = {
+        "project_name": PROJECT_NAME,
+        "collection": company_id,
+    }
+
+    for blob in [x for x in blobs if re.search(r"json$", x.name)]:
+
+        temp_dir = tempfile.mkdtemp()  # Create a temporary directory
+        temp_file_path = pathlib.Path(temp_dir) / "temp.json"
+
+        with open(temp_file_path, "wb") as temp_file:
+            blob.download_to_filename(temp_file.name)
+            kwargs = base_kwargs.copy()
+            if "cost-codes_updated.json" in blob.name:
+                kwargs.update({"document": "cost-codes"})
+            else:
+                name = blob.name.split("/")[-1].split(".")[0]
+                kwargs.update(
+                    {
+                        "document": "base-forms",
+                        "doc_collection": "forms",
+                        "doc_collection_document": name,
+                    }
+                )
+            kwargs.update({"path_to_json": temp_file.name})
+            task = asyncio.create_task(push_to_firestore(**kwargs))
+            task.add_done_callback(lambda future, path=temp_dir: shutil.rmtree(path))
+            tasks.append(task)
+
+    await asyncio.gather(*tasks)

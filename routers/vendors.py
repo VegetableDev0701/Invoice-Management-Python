@@ -23,10 +23,9 @@ router = APIRouter()
 
 @router.get("/{company_id}/vendors-data")
 async def get_projects_data(
-    company_id: str,
-    #current_user=Depends(auth.get_current_user)
+    company_id: str, current_user=Depends(auth.get_current_user)
 ) -> str:
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     doc = await get_all_project_details_data(
         project_name=PROJECT_NAME,
@@ -40,10 +39,9 @@ async def get_projects_data(
 
 @router.get("/{company_id}/get-vendors-summary")
 async def get_vendors_summary(
-    company_id: str,
-    #current_user=Depends(auth.get_current_user)
+    company_id: str, current_user=Depends(auth.get_current_user)
 ) -> str:
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     vendors_summary = await get_from_firestore(
         project_name=PROJECT_NAME,
@@ -58,9 +56,9 @@ async def get_vendors_summary(
 async def add_vendor(
     company_id: str,
     data: FullVendorDataToAdd,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     # Both the new project and a summary of that projects data come in at the same time
     full_data = data.fullData
@@ -99,9 +97,9 @@ async def update_vendor(
     company_id: str,
     vendor_id: str,
     data: FullVendorDataToAdd,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
     full_data = data.fullData
     new_summary_data = data.summaryData
 
@@ -133,10 +131,9 @@ async def update_vendor(
 
 @router.delete("/{company_id}/delete-vendors")
 async def delete_vendor(
-    company_id: str, data: List[str],
-    #current_user=Depends(auth.get_current_user)
+    company_id: str, data: List[str], current_user=Depends(auth.get_current_user)
 ):
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await delete_collections_from_firestore(
         project_name=PROJECT_NAME,

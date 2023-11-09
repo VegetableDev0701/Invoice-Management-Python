@@ -100,9 +100,7 @@ async def get_current_user(
     access_token = get_token_auth_header(auth0)
 
     jwks = get_jwks()
-    print('---#--', jwks)
     payload = verify_token(access_token, set_up()["API_AUDIENCE"], ["RS256"], jwks)
-    print('-----', payload)
     return payload
 
 
