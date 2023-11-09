@@ -31,17 +31,17 @@ TESTING = False
 app = FastAPI()
 
 
-# @app.exception_handler(RequestValidationError)
-# async def validation_exception_handler(request: Request, exc: RequestValidationError):
-#     try:
-#         return JSONResponse(
-#             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
-#             or status.HTTP_401_UNAUTHORIZED,
-#             content={"detail": exc.errors(), "body": exc.body},
-#         )
-#     except Exception as e:
-#         print(e)
-#         return exc.body
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    try:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+            or status.HTTP_401_UNAUTHORIZED,
+            content={"detail": exc.errors(), "body": exc.body},
+        )
+    except Exception as e:
+        print(e)
+        return exc.body
 
 
 app.include_router(projects.router)
@@ -75,9 +75,9 @@ app.add_middleware(
 @app.get("/{company_id}/company-data")
 async def get_form_data(
     company_id: str,
-    # #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    # #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     doc = await get_all_company_data(
         project_name=PROJECT_NAME, collection_name=company_id

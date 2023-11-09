@@ -27,7 +27,7 @@ router = APIRouter()
 @router.get("/{company_id}/projects-data")
 async def get_projects_data(
     company_id: str,
-    # current_user=Depends(auth.get_current_user)
+    current_user=Depends(auth.get_current_user)
 ) -> str:
     """
     Fetches all project details data for a given company.
@@ -43,12 +43,8 @@ async def get_projects_data(
     Returns:
         str: A JSON string containing all the project details for the specified company.
     """
-    print("--------------------------------")
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
-    print(
-        "---------***************---------",
-    )
     doc = await get_all_project_details_data(
         project_name=PROJECT_NAME,
         collection_name=company_id,
@@ -56,14 +52,13 @@ async def get_projects_data(
         details_doc_name="project-details",
     )
 
-    print("&&&&&&&&&&&&&&&&&&&&&&&&&")
     return json.dumps(doc)
 
 
 @router.get("/{company_id}/get-projects-summary")
 async def get_projects_summary(
     company_id: str,
-    # current_user=Depends(auth.get_current_user)
+    current_user=Depends(auth.get_current_user)
 ) -> str:
     """
     Fetches the summary of projects for a given company.
@@ -79,8 +74,7 @@ async def get_projects_summary(
     Returns:
         str: A JSON string containing the projects summary for the specified company.
     """
-    print("********************************")
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     projects_summary = await get_from_firestore(
         project_name=PROJECT_NAME,
@@ -95,7 +89,7 @@ async def get_projects_summary(
 async def get_all_project_data(
     company_id: str,
     project_id: str,
-    # current_user=Depends(auth.get_current_user)
+    current_user=Depends(auth.get_current_user)
 ) -> str | None:
     """
     Fetches all data related to a specific project for a given company.
@@ -113,8 +107,7 @@ async def get_all_project_data(
         str: A JSON string containing all the project data for the specified company and project.
             If no data is found, returns None.
     """
-    print("---------------------")
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     project_data = await stream_all_project_data(
         project_name=PROJECT_NAME,
@@ -133,7 +126,7 @@ async def get_all_project_data(
 async def add_project(
     company_id: str,
     data: FullProjectDataToAdd,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
     """
     Adds a new project to a given company's project collection.
@@ -155,7 +148,7 @@ async def add_project(
     Raises:
         HTTPException: If any fields in the provided data are invalid.
     """
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
     # Both the new project and a summary of that projects data come in at the same time
     full_data = data.fullData
     new_summary_data = data.summaryData
@@ -197,7 +190,7 @@ async def update_project(
     company_id: str,
     project_id: str,
     data: FullProjectDataToAdd,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
     """
     Updates a specific project of a given company.
@@ -216,7 +209,7 @@ async def update_project(
     Returns:
         dict: A dictionary containing a success message if the operation was successful.
     """
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     full_data = data.fullData
     new_summary_data = data.summaryData
@@ -248,7 +241,7 @@ async def change_project_status(
     company_id: str,
     data: List[str],
     change_status_to: str,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
     """
     Changes the status of specific projects of a given company.
@@ -266,7 +259,7 @@ async def change_project_status(
     Returns:
         dict: A dictionary containing a success message if the operation was successful.
     """
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     # Update in the summary data
     await update_project_status(
@@ -283,7 +276,7 @@ async def change_project_status(
 async def delete_project(
     company_id: str,
     data: List[str],
-    # current_user=Depends(auth.get_current_user)
+    current_user=Depends(auth.get_current_user)
 ) -> dict:
     """
     Deletes specific projects of a given company.
@@ -300,7 +293,7 @@ async def delete_project(
     Returns:
         dict: A dictionary containing a success message if the operation was successful.
     """
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     task1 = delete_collections_from_firestore(
         project_name=PROJECT_NAME,
@@ -327,9 +320,9 @@ async def add_project_b2a_chart_data(
     company_id: str,
     project_id: str,
     data: FullB2ADataV2,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await push_to_firestore(
         project_name=PROJECT_NAME,

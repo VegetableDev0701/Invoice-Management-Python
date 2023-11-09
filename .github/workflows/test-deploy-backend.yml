@@ -1,0 +1,131 @@
+name: Run tests
+on:
+  pull_request:
+    branches:
+      - staging
+      - main
+  push:
+    branches:
+      - staging
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: auth
+        name: Authenticate to google cloud
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: projects/${{vars.GOOGLE_CLOUD_PROJECT}}/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: stak-firestore-service-account@${{vars.PROJECT_ID}}.iam.gserviceaccount.com
+
+      - name: Set up python 3.10.4
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10.4'
+
+      - name: Cache dependencies
+        id: cache
+        uses: actions/cache@v3
+        if: always()
+        with:
+          path: /home/runner/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Set PYTHONPATH
+        run: |
+          echo "PYTHONPATH=$PWD:$PYTHONPATH" >> $GITHUB_ENV
+
+      - name: Run test
+        run: pytest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment variable based on branch
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/staging" ]]; then
+              echo "ENV=staging" >> $GITHUB_ENV
+              echo "NODE=STAGING" >> $GITHUB_ENV
+            elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+              echo "ENV=production" >> $GITHUB_ENV
+              echo "NODE=PRODUCTION" >> $GITHUB_ENV
+            else 
+              echo "ENV=development" >> $GITHUB_ENV
+              echo "NODE=DEV" >> $GITHUB_ENV
+          fi
+
+      - name: Set variable names based on environment
+        run: |
+          echo "AGAVE_CLIENT_SECRET=${NODE}_AGAVE_CLIENT_SECRET" >> $GITHUB_ENV
+          echo "CLOUD_RUN_DEPLOY_NODE_ENV=${ENV}-stak-backend" >> $GITHUB_ENV
+          echo "AGAVE_CLIENT_ID=${{ vars[format('{0}_AGAVE_CLIENT_ID', env.NODE)] }}" >> $GITHUB_ENV
+          echo "AUTH0_ISSUER=${{ vars[format('{0}_AUTH0_ISSUER', env.NODE)] }}" >> $GITHUB_ENV
+          echo "AUTH0_DOMAIN=${{ vars[format('{0}_AUTH0_DOMAIN', env.NODE)] }}" >> $GITHUB_ENV
+          echo "AUTH0_API_AUDIENCE=${{ vars[format('{0}_AUTH0_API_AUDIENCE', env.NODE)] }}" >> $GITHUB_ENV
+
+      - id: auth
+        name: Authenticate to google cloud
+        uses: google-github-actions/auth@v1
+        with:
+          workload_identity_provider: projects/${{vars.GOOGLE_CLOUD_PROJECT}}/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          service_account: stak-firestore-service-account@${{vars.PROJECT_ID}}.iam.gserviceaccount.com
+
+      - name: 'Set up Cloud SDK'
+        uses: 'google-github-actions/setup-gcloud@v1'
+
+      # Authenticate Docker to Artifact Registry using gcloud
+      - name: Authenticate Docker to Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{vars.US_MULTI_REGION}}-docker.pkg.dev
+          gcloud config set project ${{vars.PROJECT_ID}}
+
+      # Build the Docker image
+      - name: Build and push docker image to artifact registry
+        run: |
+          TIMESTAMP=$(date +'%Y%m%d%H%M%S')
+          TAG="$ENV-$TIMESTAMP"
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          docker build -t ${{vars.US_MULTI_REGION}}-docker.pkg.dev/${{vars.PROJECT_ID}}/${{vars.ARTIFACT_REPOSITORY_NAME}}/$CLOUD_RUN_DEPLOY_NODE_ENV:$TAG .
+          docker push ${{vars.US_MULTI_REGION}}-docker.pkg.dev/${{vars.PROJECT_ID}}/${{vars.ARTIFACT_REPOSITORY_NAME}}/$CLOUD_RUN_DEPLOY_NODE_ENV:$TAG
+        id: build_and_push
+
+      # Deploy the latest container to cloud run
+      - name: Deploy cloud run revision with latest container
+        run: |
+          gcloud run deploy $CLOUD_RUN_DEPLOY_NODE_ENV \
+            --set-env-vars ENV=$ENV,GOOGLE_CLOUD_PROJECT=${{vars.GOOGLE_CLOUD_PROJECT}},AUTH0_DOMAIN=$AUTH0_DOMAIN,AUTH0_API_AUDIENCE=$AUTH0_API_AUDIENCE,AUTH0_ALGORITHMS=${{vars.AUTH0_ALGORITHMS}},AUTH0_ISSUER=$AUTH0_ISSUER,TZ=${{vars.TIMEZONE}},AGAVE_CLIENT_ID=$AGAVE_CLIENT_ID,AGAVE_TOKEN_EXCHANGE_URL=${{vars.AGAVE_TOKEN_EXCHANGE_URL}},AGAVE_API_VERSION=${{vars.AGAVE_API_VERSION}},AGAVE_LINK_CONNECTION_URL=${{vars.AGAVE_LINK_CONNECTION_URL}} \
+            --image ${{vars.US_MULTI_REGION}}-docker.pkg.dev/${{vars.PROJECT_ID}}/${{vars.ARTIFACT_REPOSITORY_NAME}}/$CLOUD_RUN_DEPLOY_NODE_ENV:$TAG \
+            --update-secrets AGAVE_CLIENT_SECRET=$AGAVE_CLIENT_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest \
+            --region us-central1 \
+            --platform managed \
+            --memory 2Gi \
+            --cpu 1 \
+            --timeout 300s \
+            --concurrency 80 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --service-account cloud-run@${{vars.PROJECT_ID}}.iam.gserviceaccount.com

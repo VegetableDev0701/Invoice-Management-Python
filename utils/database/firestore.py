@@ -116,25 +116,6 @@ async def stream_all_project_data(
             else:
                 doc = await doc.get()
                 project_data[doc.id] = doc.to_dict()
-
-        # if "b2a" in project_data.keys():
-        #     # Hacky workaround becuase Firestore will not accept numbers as keys
-        #     # and here I want them as numbers and sorted.
-        #     new_dict_outer = {}
-        #     for key, value in project_data["b2a"]["b2aChartData"].items():
-        #         try:
-        #             new_dict_outer[int(key)] = value
-        #         except ValueError:
-        #             pass
-        #     project_data["b2a"]["b2aChartData"] = dict(sorted(new_dict_outer.items()))
-
-        #     for key, value in project_data["b2a"]["b2aChartData"].items():
-        #         new_dict_inner = {}
-        #         for innerKey, innerValue in value["subDivisions"].items():
-        #             new_dict_inner[float(innerKey)] = innerValue
-        #         project_data["b2a"]["b2aChartData"][key]["subDivisions"] = dict(
-        #             sorted(new_dict_inner.items())
-        #         )
         db.close()
         return project_data
     except Exception as e:

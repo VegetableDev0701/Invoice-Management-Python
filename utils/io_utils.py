@@ -112,10 +112,8 @@ async def access_secret_version(secret_id: str, version_id: str = "latest"):
     """
     client = secretmanager.SecretManagerServiceAsyncClient()
     name = f"projects/{os.getenv('GOOGLE_CLOUD_PROJECT')}/secrets/{secret_id}/versions/{version_id}"
-    print(name)
     response = await client.access_secret_version(name=name)
     payload = response.payload.data.decode("UTF-8")
-    print(payload)
     return payload
 
 

@@ -36,9 +36,9 @@ async def get_client_bill(
     project_id: str,
     client_bill_id: str,
     is_only_current_actuals: str,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> str:
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     if is_only_current_actuals == "true":
         current_actuals = await get_client_bill_current_actuals_from_firestore(
@@ -64,9 +64,9 @@ async def add_client_bill(
     project_id: str,
     client_bill_id: str,
     data: AddClientBillData,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     if (
         data.currentActuals is not None
@@ -110,9 +110,9 @@ async def build_ar_invoice(
     project_id: str,
     client_bill_id: str,
     data: CustomerInfo,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
     customer_name = data.customerName
     customer_email = data.customerEmail
 
@@ -185,9 +185,9 @@ async def delete_client_bills(
     project_id: str,
     data: List[str],
     background_tasks: BackgroundTasks,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await push_update_to_firestore(
         project_name=PROJECT_NAME,

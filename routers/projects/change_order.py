@@ -24,9 +24,9 @@ async def add_labor(
     company_id: str,
     project_id: str,
     data: FullChangeOrderDataToAdd,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     full_data = data.fullData
     new_summary_data = data.summaryData
@@ -62,9 +62,9 @@ async def update_labor(
     project_id: str,
     change_order_id: str,
     data: FullChangeOrderDataToAdd,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     full_data = data.fullData
     new_summary_data = data.summaryData
@@ -100,9 +100,9 @@ async def update_labor(
     company_id: str,
     project_id: str,
     data: ChangeOrderContent,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     tasks = []
     for change_order_id in data.dict()["__root__"].keys():
@@ -131,9 +131,9 @@ async def delete_labor(
     company_id: str,
     project_id: str,
     data: DeleteChangeOrderData,
-    #current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    #auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     change_order_ids_to_remove = data.removeChangeOrderIds
     update_processed_data = data.updateProcessedData
