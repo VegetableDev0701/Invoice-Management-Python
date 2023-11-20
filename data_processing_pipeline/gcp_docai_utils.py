@@ -1,5 +1,6 @@
 import os
 import json
+import time
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -11,7 +12,9 @@ import gcsfs
 from google.cloud import documentai_v1 as documentai
 from google.cloud import storage
 
-from data_processing_pipeline.batch_process import process_batch_process
+from data_processing_pipeline.batch_process import (
+    process_batch_process,
+)
 from config import Config, ProjectPredConfig
 from data_processing_pipeline.matching_algorithm_utils import (
     get_data_for_predictions,
@@ -31,6 +34,8 @@ from utils.database.projects.utils import get_project_object
 from config import PROJECT_NAME
 from global_vars import globals_io
 from global_vars.prompts import Prompts
+
+storage_client = storage.Client()
 
 
 # TODO implement logging in this function
@@ -147,6 +152,7 @@ async def batch_process_contracts(
 
         await asyncio.gather(*tasks)
 
+    # start = time.time()
     for i in sub_dirs:
         metadata = None
         await push_update_to_firestore(
@@ -174,6 +180,7 @@ async def batch_process_contracts(
             )
 
         await process_async(metadata)
+    # print(f"{round(time.time() - start, 2)} seconds")
 
 
 async def process_and_move_invoices(
@@ -443,9 +450,9 @@ async def process_and_move_contracts(
             PROJECT_NAME, company_id, "project-summary", project_id
         )
 
-        # doc_dict["summaryData"]["projectName"] = project_obj["name"]
-
         summary_data["projectName"] = project_obj["name"]
+
+        doc_dict["summaryData"] = summary_data
 
         # push to db
         task1 = save_doc_dict_async(

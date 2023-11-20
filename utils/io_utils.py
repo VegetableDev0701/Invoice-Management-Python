@@ -73,13 +73,18 @@ async def delete_document_hash_from_firestore(
     uuids: List[str], project_name: str, company_id: str
 ):
     db = firestore.AsyncClient(project=project_name)
-    document_hash_ref = db.collection(company_id).document("documents")
-    doc = await document_hash_ref.get()
-    if doc.exists:
-        for field in uuids:
-            await doc.reference.update({field: firestore.DELETE_FIELD})
-    else:
-        print(f"No such document: {doc.id}")
+    try:
+        document_hash_ref = db.collection(company_id).document("documents")
+        doc = await document_hash_ref.get()
+        if doc.exists:
+            for field in uuids:
+                await doc.reference.update({field: firestore.DELETE_FIELD})
+        else:
+            print(f"No such document: {doc.id}")
+    except Exception as e:
+        print(e)
+    finally:
+        db.close()
 
 
 def create_secret(secret_id, value):

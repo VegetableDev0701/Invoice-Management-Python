@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 from config import PROJECT_NAME
 from utils import auth
 from utils.data_models.change_orders import (
+    BulkFullChangeOrderDataToAdd,
     FullChangeOrderDataToAdd,
     ChangeOrderContent,
     DeleteChangeOrderData,
@@ -88,6 +89,54 @@ async def update_labor(
     )
 
     await asyncio.gather(task1, task2)
+
+    return {
+        "message": "Succesfully updated change order.",
+    }
+
+
+@router.patch("/{company_id}/update-bulk-change-orders")
+async def update_labor(
+    company_id: str,
+    project_id: str,
+    data: BulkFullChangeOrderDataToAdd,
+    current_user=Depends(auth.get_current_user),
+):
+    auth.check_user_data(company_id=company_id, current_user=current_user)
+
+    full_data = data.fullData
+    new_summary_data = data.summaryData
+
+    tasks = []
+
+    for change_order_id in full_data.keys():
+        tasks.append(
+            asyncio.create_task(
+                push_to_firestore(
+                    project_name=PROJECT_NAME,
+                    collection=company_id,
+                    data={change_order_id: full_data[change_order_id].dict()},
+                    document="projects",
+                    doc_collection=project_id,
+                    doc_collection_document="change-orders",
+                )
+            )
+        )
+
+        tasks.append(
+            asyncio.create_task(
+                push_update_to_firestore(
+                    project_name=PROJECT_NAME,
+                    collection=company_id,
+                    data={change_order_id: new_summary_data[change_order_id].dict()},
+                    document="projects",
+                    doc_collection=project_id,
+                    doc_collection_document="change-orders-summary",
+                )
+            )
+        )
+
+    await asyncio.gather(*tasks)
 
     return {
         "message": "Succesfully updated change order.",

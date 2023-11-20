@@ -544,6 +544,56 @@ async def add_client_bill_actuals(
     finally:
         db.close()
 
+async def update_client_bill_details(
+    project_name: str, collection: str, project_id: str, client_bill_id: str, data: dict
+):
+    db = firestore.AsyncClient(project=project_name)
+
+    invoices = data.invoices
+    labor = data.labor
+    laborSummary = data.laborSummary
+    bill_summary = data.clientBillSummary
+    bill_work_description = data.clientBillObj
+    try: 
+        client_bill_ref = (
+            db.collection(collection)
+            .document("projects")
+            .collection(project_id)
+            .document("client-bills")
+            .collection(client_bill_id)
+        )
+
+        if invoices is not None:
+            invoices_dict = invoices.dict()
+            await client_bill_ref.document("invoices").set(invoices_dict["__root__"])
+        if labor is not None:
+            labor_dict = labor.dict()
+            await client_bill_ref.document("labor").set(labor_dict["__root__"])
+        if laborSummary is not None:
+            laborSummary_dict = {f"{item.uuid}": item.dict() for index, item in enumerate(laborSummary)}
+            await client_bill_ref.document("labor-summary").set(laborSummary_dict)
+        if bill_work_description is not None:
+            await client_bill_ref.document("bill-work-description").set(bill_work_description.dict())
+
+        client_bill_summary_ref = (
+            db.collection(collection)
+            .document("projects")
+            .collection(project_id)
+            .document("client-bills-summary")
+        )
+        doc = await client_bill_summary_ref.get()
+        client_bill_summary_data = doc.to_dict()
+
+        client_bill_summary_data[client_bill_id] = bill_summary.dict()
+
+        await client_bill_summary_ref.set(client_bill_summary_data)
+        return {"status" : "success"}
+        
+    except Exception as e:
+        logger_project_utils.exception(f"Error updating client bill: {e}")
+        return {"message": "Error updating client bill."}
+    finally:   
+        db.close()
 
 async def copy_doc_to_db(
     destination_snapshot: firestore.DocumentSnapshot | None,

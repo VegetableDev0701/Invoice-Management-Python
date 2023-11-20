@@ -2,7 +2,7 @@ from typing import Dict, List
 from pydantic import BaseModel, Extra
 
 from utils.data_models.formdata import MainCategories
-from utils.data_models.invoices import ProcessedData
+from utils.data_models.invoices import ProcessedInvoiceDataItem
 from utils.data_models.projects import SummaryLabor
 
 
@@ -53,8 +53,13 @@ class FullChangeOrderDataToAdd(BaseModel):
     summaryData: SummaryChangeOrderData
 
 
+class BulkFullChangeOrderDataToAdd(BaseModel):
+    fullData: Dict[str, AddChangeOrderData]
+    summaryData: Dict[str, SummaryChangeOrderData]
+
+
 class UpdateProcessedData(BaseModel):
-    processedData: ProcessedData
+    processedData: ProcessedInvoiceDataItem
 
 
 class InvoiceProcessedData(BaseModel):

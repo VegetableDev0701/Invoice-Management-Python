@@ -1,5 +1,4 @@
 import json
-import traceback
 from typing import List
 import requests
 
@@ -16,16 +15,17 @@ from utils.database.projects.utils import (
     add_new_client_bill,
     add_client_bill_actuals,
     get_client_bill_current_actuals_from_firestore,
+    update_client_bill_details,
 )
 from utils.database.projects.client_bill_utils import (
     delete_client_bill_background,
 )
-from utils.data_models.projects import AddClientBillData
+from utils.data_models.projects import AddClientBillData, UpdateClientBillData
 from utils.database.projects.build_ar_invoice_utils import (
     get_agave_customer_id,
     build_ar_invoice_request_data,
 )
-from utils.io_utils import access_secret_version, create_secret_id
+from utils.io_utils import access_secret_version
 
 router = APIRouter()
 
@@ -56,6 +56,30 @@ async def get_client_bill(
             client_bill_id=client_bill_id,
         )
     return json.dumps(client_bill)
+
+
+@router.post("/{company_id}/update-client-bill")
+async def update_client_bill(
+    company_id: str,
+    project_id: str,
+    client_bill_id: str,
+    data: UpdateClientBillData,
+    current_user=Depends(auth.get_current_user),
+) -> dict:
+    auth.check_user_data(company_id=company_id, current_user=current_user)
+
+    return_data = await update_client_bill_details(
+        project_name=PROJECT_NAME,
+        collection=company_id,
+        project_id=project_id,
+        client_bill_id=client_bill_id,
+        data=data,
+    )
+
+    if return_data:
+        return return_data
+    else:
+        return {"message": "Successfully updated client bill."}
 
 
 @router.post("/{company_id}/add-client-bill")
@@ -122,8 +146,6 @@ async def build_ar_invoice(
         customer_email=customer_email,
     )
 
-    print(customer_id)
-
     if customer_id is None:
         raise HTTPException(
             status_code=404,
@@ -145,8 +167,6 @@ async def build_ar_invoice(
         "Content-Type": "application/json",
         "Include-Source-Data": "true",
     }
-
-    print(headers)
 
     line_items = await build_ar_invoice_request_data(
         company_id=company_id, project_id=project_id, client_bill_id=client_bill_id

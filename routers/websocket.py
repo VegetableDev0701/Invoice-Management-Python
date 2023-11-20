@@ -1,10 +1,8 @@
 import asyncio
-import itertools
 import logging
 import traceback
 import re
 
-import gcsfs
 from google.cloud import firestore, storage
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
@@ -21,12 +19,8 @@ from config import CUSTOMER_DOCUMENT_BUCKET, PROJECT_NAME
 logging.basicConfig(level=logging.INFO)
 
 client = storage.Client(project="stak-app")
-bucket = client.get_bucket("stak-customer-documents")
 
 router = APIRouter()
-
-
-# fs = gcsfs.GCSFileSystem()
 
 
 @router.websocket("/{company_id}/listen-invoice-updates")
@@ -168,7 +162,7 @@ async def listen_to_firestore_contract(
     websocket: WebSocket,
     company_id: str,
     token: str,
-    PROJECT_NAME: str,
+    project_id: str,
 ):
     # Authenticate the user
     current_user = await auth.get_current_user(auth0=f"Bearer {token}")
@@ -186,7 +180,7 @@ async def listen_to_firestore_contract(
         document_ref = (
             db.collection(company_id)
             .document("projects")
-            .collection(PROJECT_NAME)
+            .collection(project_id)
             .document("contracts")
         )
         logging_ref = db.collection(company_id).document("logging")
@@ -242,7 +236,7 @@ async def listen_to_firestore_contract(
             try:
                 contract_sub_dirs = get_sub_dirs(
                     client,
-                    prefix=f"{company_id}/projects/{PROJECT_NAME}/contracts/{RAW_DOCS_UNPROCESSED_INVOICE_PATH}",
+                    prefix=f"{company_id}/projects/{project_id}/contracts/{RAW_DOCS_UNPROCESSED_INVOICE_PATH}",
                 )
 
                 num_files_left = len(

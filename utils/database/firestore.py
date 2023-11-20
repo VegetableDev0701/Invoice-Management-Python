@@ -45,22 +45,32 @@ async def get_from_firestore(
 ):
     db = firestore.AsyncClient(project=project_name)
     try:
-        document_ref = db.collection(collection_name).document(document_name)
-        if doc_collection and doc_collection_document:
-            document_ref = document_ref.collection(doc_collection).document(
-                doc_collection_document
-            )
-            doc = await document_ref.get()
-            db.close()
-            return doc.to_dict()
-        else:
-            doc = await document_ref.get()
-            db.close()
-            return doc.to_dict()
-    except Exception as e:
-        firestore_io_logger.exception(
-            f"An error occurred streaming all project data: {e}"
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(RETRY_TIMES),
+            wait=wait_exponential_jitter(),
+            retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+            reraise=True,
+            before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
+        ):
+            with attempt:
+                document_ref = db.collection(collection_name).document(document_name)
+                if doc_collection and doc_collection_document:
+                    document_ref = document_ref.collection(doc_collection).document(
+                        doc_collection_document
+                    )
+                    doc = await document_ref.get()
+                    return doc.to_dict()
+                else:
+                    doc = await document_ref.get()
+                    return doc.to_dict()
+    except RetryError as e:
+        firestore_io_logger.error(
+            f"{e} occured while trying to get data from firestore"
         )
+        raise
+
+    except Exception as e:
+        firestore_io_logger.exception(f"An error occurred getting data: {e}")
     finally:
         db.close()
 
@@ -81,11 +91,9 @@ async def get_all_project_details_data(
             db.collection(collection_name).document(document_name).collections()
         )
         docs = {}
-
         async for collection in collections:
             doc = await collection.document(details_doc_name).get()
             docs[collection.id] = doc.to_dict()
-        db.close()
         return docs
     except Exception as e:
         firestore_io_logger.exception(
@@ -116,7 +124,6 @@ async def stream_all_project_data(
             else:
                 doc = await doc.get()
                 project_data[doc.id] = doc.to_dict()
-        db.close()
         return project_data
     except Exception as e:
         firestore_io_logger.exception(
@@ -158,7 +165,6 @@ async def stream_entire_collection(
                 del doc_dict["full_document_text"]
                 del doc_dict["entities"]
             docs[doc.id] = doc_dict
-        db.close()
         return docs
     except Exception as e:
         firestore_io_logger.exception(
@@ -211,7 +217,6 @@ async def get_all_company_data(project_name: str, collection_name: str):
                             vendor_forms["vendors"][coll.id] = docc.to_dict()
             else:
                 pass
-        db.close()
         return json.dumps({**base_forms, **project_forms, **vendor_forms})
     except Exception as e:
         firestore_io_logger.exception(
@@ -230,6 +235,13 @@ async def push_to_firestore(
     doc_collection: str | None = None,
     doc_collection_document: str | None = None,
 ):
+    """
+    Pushes data to firestore. If a path_to_json is provided, it will load that json data
+    and push that to firestore skipping any other data that is provided in the data argument.
+    """
+    if not path_to_json and not data:
+        raise Exception("Must provide either a `path_to_json` OR `data` arguments.")
+
     db = firestore.AsyncClient(project=project_name)
     try:
         document_ref = db.collection(collection).document(document)
@@ -241,13 +253,16 @@ async def push_to_firestore(
 
         if path_to_json:
             with open(path_to_json, "r") as file:
-                json_data = json.load(file)
+                firestore_data = json.load(file)
+        else:
+            firestore_data = data.copy()
 
         doc = await document_ref.get()
         if doc.exists:
-            await document_ref.update(data)
+            await document_ref.update(firestore_data)
         else:
-            await document_ref.set(data)
+            await document_ref.set(firestore_data)
+
     except Exception as e:
         firestore_io_logger.exception(
             f"An error occurred pushing data to firestore: {e}"

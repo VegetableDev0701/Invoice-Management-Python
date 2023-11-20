@@ -14,7 +14,15 @@ from utils import auth
 from global_vars.globals_io import (
     DOC_TYPE_INVOICE,
 )
-from routers import vendors, forms, cost_codes, invoices, websocket, agave
+from routers import (
+    vendors,
+    forms,
+    cost_codes,
+    invoices,
+    websocket,
+    agave,
+    onboard_new_user_router,
+)
 from routers.projects import (
     projects,
     labor,
@@ -56,6 +64,7 @@ app.include_router(websocket.router)
 app.include_router(budget.router)
 app.include_router(client_bill.router)
 app.include_router(agave.router)
+app.include_router(onboard_new_user_router.router)
 
 app.add_middleware(
     CORSMiddleware,

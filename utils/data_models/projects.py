@@ -1,7 +1,11 @@
 from typing import Dict, List
 from pydantic import BaseModel, Extra
 
-from utils.data_models.formdata import MainCategories
+from utils.data_models.formdata import (
+    MainCategories, 
+    Labor,
+    LaborSummaryItem
+)
 from utils.data_models.budgets import (
     Divisions,
     CurrentActuals,
@@ -9,7 +13,10 @@ from utils.data_models.budgets import (
     ChangeOrderActuals,
     ChangeOrderActualsV2,
 )
-from utils.data_models.invoices import ChangeOrderObject
+from utils.data_models.invoices import ( 
+    ChangeOrderObject,
+    Invoices
+)
 
 
 class AddProjectData(BaseModel):
@@ -156,3 +163,10 @@ class AddClientBillData(BaseModel):
     currentActuals: CurrentActualsV2 | None
     currentActualsChangeOrders: ChangeOrderActuals | ChangeOrderActualsV2 | None
     clientBillObj: ClientBillDataV2 | None
+
+class UpdateClientBillData(BaseModel):
+    invoices: Invoices | None
+    clientBillSummary: BillSummary | None
+    clientBillObj: ClientBillDataV2 | None
+    labor: Labor | None
+    laborSummary: List[LaborSummaryItem] | None

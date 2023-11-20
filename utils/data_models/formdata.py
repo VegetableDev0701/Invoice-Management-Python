@@ -1,5 +1,5 @@
 from typing import Dict, List
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel
 
 
 class SelectMenuOptions(BaseModel):
@@ -45,3 +45,38 @@ class MainCategories(BaseModel):
 class AccountSettings(BaseModel):
     name: str
     mainCategories: List[MainCategories]
+
+
+class ChangeOrder(BaseModel):
+    uuid: str
+    name: str
+
+
+class LaborData(BaseModel):
+    numCostCodes: int
+    name: str | None = None
+    uuid: str | None = None
+    mainCategories: List[MainCategories]
+
+
+class Labor(BaseModel):
+    __root__: Dict[str, LaborData]
+
+
+class LaborLineItemItem(BaseModel):
+    cost_code: str
+    work_description: str
+    number_of_hours: str
+    change_order: ChangeOrder | None = None
+    amount: str
+
+
+class LaborSummaryItem(BaseModel):
+    uuid: str
+    name: str
+    rate: str
+    line_items: Dict[str, LaborLineItemItem]
+    payPeriod: str
+    totalAmt: str
+    clientBillId: str | None = None
+    currentLabor: bool

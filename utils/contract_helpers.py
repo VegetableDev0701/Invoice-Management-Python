@@ -9,8 +9,8 @@ import re
 from typing import List
 
 import aiofiles
-from google.oauth2 import service_account
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from google.auth import default
 from google.auth.exceptions import GoogleAuthError
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -60,15 +60,8 @@ def get_google_drive_creds():
     SCOPES = ["https://www.googleapis.com/auth/drive"]
     creds = None
     try:
-        creds = service_account.Credentials.from_service_account_file(
-            os.environ["GOOGLE_APPLICATION_CREDENTIALS"], scopes=SCOPES
-        )
-    except KeyError:
-        print("Environment variable 'GOOGLE_APPLICATION_CREDENTIALS' not set.")
-        return False
-    except FileNotFoundError:
-        print(f"No file found at path: {os.environ['GOOGLE_APPLICATION_CREDENTIALS']}")
-        return False
+        creds, _ = default(scopes=SCOPES)
+
     except GoogleAuthError as error:
         print(f"Google authentication failed: {error}")
         return False

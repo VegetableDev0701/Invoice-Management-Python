@@ -132,7 +132,6 @@ async def create_files(
         )
 
     i = 0
-    tasks = []
     for contract_id, file in files:
         if (
             not re.search(r"doc|docx$", file.filename.split(".")[-1])
@@ -141,7 +140,7 @@ async def create_files(
             raise HTTPException(422, "Invalid document type")
 
         filename = f"{os.path.splitext(file.filename)[0]}::{contract_id}::.pdf"
-
+        tasks = []
         bucket_prefix = f"{company_id}/projects/{project_id}/contracts/raw-documents/unprocessed/{i}"
         while (
             len(list(bucket.list_blobs(prefix=f"{bucket_prefix}/")))
@@ -172,8 +171,8 @@ async def create_files(
                 await out_file.write(content)
                 blob = bucket.blob(f"{bucket_prefix}/{filename}")
                 blob.upload_from_filename(out_file.name, content_type=file.content_type)
-
     await asyncio.gather(*tasks)
+
     await push_update_to_firestore(
         project_name="stak-app",
         collection=company_id,

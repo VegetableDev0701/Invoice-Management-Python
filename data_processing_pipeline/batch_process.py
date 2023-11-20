@@ -1,9 +1,22 @@
 import asyncio
 import traceback
+from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 
 from google.api_core.client_options import ClientOptions
-from google.api_core.exceptions import InternalServerError, RetryError
 from google.cloud import documentai_v1 as documentai
+from google.api_core.exceptions import RetryError, InternalServerError
+
+
+async def async_process_batch_process(*args, **kwargs):
+    loop = asyncio.get_running_loop()
+    with ThreadPoolExecutor() as pool:
+        try:
+            partial_func = partial(process_batch_process, *args, **kwargs)
+            return await loop.run_in_executor(pool, partial_func)
+        except Exception as e:
+            print(f"Error in async_process_batch_process: {e}")
+            traceback.print_exc()
 
 
 async def process_batch_process(
@@ -14,7 +27,7 @@ async def process_batch_process(
     gcs_output_bucket: str,
     gcs_output_uri_prefix: str,
     is_async: bool,
-    timeout: int | None = 400,
+    timeout: int | None = None,
 ):
     """
     Processes documents in a batch using the Document AI API.
@@ -71,7 +84,7 @@ async def process_batch_process(
     else:
         try:
             # BatchProcess returns a Long Running Operation (LRO)
-            operation = client.batch_process_documents(request)
+            operation = client.batch_process_documents(request, timeout=timeout)
 
             # async
             def my_callback(future):
@@ -86,7 +99,7 @@ async def process_batch_process(
         while (
             operation.metadata.state != documentai.BatchProcessMetadata.State.SUCCEEDED
         ):
-            await asyncio.sleep(1)
+            await asyncio.sleep(2)
 
     metadata = documentai.BatchProcessMetadata(operation.metadata)
     if metadata.state != documentai.BatchProcessMetadata.State.SUCCEEDED:

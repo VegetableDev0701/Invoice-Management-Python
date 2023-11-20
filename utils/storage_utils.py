@@ -270,14 +270,13 @@ async def download_and_onboard_new_company_files(company_id: str):
     }
 
     for blob in [x for x in blobs if re.search(r"json$", x.name)]:
-
         temp_dir = tempfile.mkdtemp()  # Create a temporary directory
         temp_file_path = pathlib.Path(temp_dir) / "temp.json"
 
         with open(temp_file_path, "wb") as temp_file:
             blob.download_to_filename(temp_file.name)
             kwargs = base_kwargs.copy()
-            if "cost-codes_updated.json" in blob.name:
+            if "cost-codes.json" in blob.name:
                 kwargs.update({"document": "cost-codes"})
             else:
                 name = blob.name.split("/")[-1].split(".")[0]
