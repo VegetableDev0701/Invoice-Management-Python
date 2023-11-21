@@ -66,18 +66,24 @@ async def get_completion_gpt4(
         ):
             with attempt:
                 messages = [{"role": "user", "content": messages}]
-                response = await openai.ChatCompletion.acreate(
-                    model=model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                )
-                num_tokens = num_tokens_from_messages(
-                    messages=response.choices[0].message["content"]
-                )
-                num_tokens_logger.info(f"Job: {job_type}; Ouput tokens: {num_tokens}")
-                # num_tokens_logger.info("-" * 60)
-                return response.choices[0].message["content"]
+                try:
+                    response = await openai.ChatCompletion.acreate(
+                        model=model,
+                        messages=messages,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                    )
+                    num_tokens = num_tokens_from_messages(
+                        messages=response.choices[0].message["content"]
+                    )
+                    num_tokens_logger.info(
+                        f"Job: {job_type}; Ouput tokens: {num_tokens}"
+                    )
+                    # num_tokens_logger.info("-" * 60)
+                    return response.choices[0].message["content"]
+                except Exception as e:
+                    print(e)
+                    return None
     except RetryError as e:
         print("retrying....")
         gpt_logger.error(f"{e} occured while requesting from GPT4 model.")

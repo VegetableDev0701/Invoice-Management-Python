@@ -1,7 +1,7 @@
 import asyncio
 import json
 import re
-from typing import Tuple
+from typing import Tuple, Union
 from dotenv import load_dotenv
 import os
 import logging
@@ -475,19 +475,25 @@ async def get_vendor_name(
         else:
             continue
     try:
-        response: str = await model_utils.get_completion_gpt4(
+        response: str | None = await model_utils.get_completion_gpt4(
             prompt.supplier_prompt, max_tokens=100, job_type="vendor_matching"
         )
-        if not isinstance(response, str):
-            return {"supplier_name": None, "isGPT": True}
+        if response:
+            if not isinstance(response, str):
+                return {"supplier_name": None, "isGPT": True}
+            else:
+                response = response.replace("\n", "").replace("```", "")
+            try:
+                return {
+                    "supplier_name": json.loads(response)["vendor_name"],
+                    "isGPT": True,
+                }
+            except json.JSONDecodeError:
+                logger.exception(
+                    f"GPT API returned a value that was not a valid JSON: {response} "
+                )
+                return {"supplier_name": None, "isGPT": True}
         else:
-            response = response.replace("\n", "").replace("```", "")
-        try:
-            return {"supplier_name": json.loads(response)["vendor_name"], "isGPT": True}
-        except json.JSONDecodeError:
-            logger.exception(
-                f"GPT API returned a value that was not a valid JSON: {response} "
-            )
             return {"supplier_name": None, "isGPT": True}
     except (
         openai.error.APIConnectionError,

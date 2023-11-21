@@ -5,6 +5,7 @@ import re
 
 from google.cloud import firestore, storage
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from websockets.exceptions import ConnectionClosedError, ConnectionClosedOK
 
 from starlette.websockets import WebSocketState
 
@@ -24,7 +25,7 @@ router = APIRouter()
 
 
 @router.websocket("/{company_id}/listen-invoice-updates")
-async def listen_to_firestore_invoice_ws(
+async def listen_to_firestore_invoice_updates(
     websocket: WebSocket,
     company_id: str,
     token: str,
@@ -51,18 +52,30 @@ async def listen_to_firestore_invoice_ws(
         initial_docs = {doc.id: doc.to_dict() async for doc in collection_ref.stream()}
 
         while True:
+            print(websocket.client_state)
             # check websocket connection
-            if websocket.client_state == WebSocketState.CONNECTED:
-                await websocket.send_json({"event": "heartbeat", "data": "ping"})
-                response = await websocket.receive_json()
-                if response["data"] != "pong":
-                    print("Heartbeat failed.")
+            try:
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_json({"event": "heartbeat", "data": "ping"})
+                    response = await websocket.receive_json()
+                    if response["data"] != "pong":
+                        print("Heartbeat failed.")
+                        break
+                else:
+                    print("Server thinks the WebSocket is not connected.")
                     break
-            else:
-                print("Server thinks the WebSocket is not connected.")
+            except ConnectionClosedOK:
+                print("WebSocket connection closed normally.")
+                break
+            except ConnectionClosedError:
+                print("WebSocket connection closed with error.")
+                break
+            except Exception as e:
+                print(e)
                 break
 
             logging_doc = await logging_ref.get()
+            loggin_doc_dict = logging_doc.to_dict()
             current_docs = {
                 doc.id: doc.to_dict() async for doc in collection_ref.stream()
             }
@@ -73,7 +86,7 @@ async def listen_to_firestore_invoice_ws(
                 if doc_id not in initial_docs
             }
 
-            if logging_doc.to_dict()["is_scanning_docs"]:
+            if loggin_doc_dict.get("is_scanning_docs"):
                 await websocket.send_json(
                     {"event": "scanning_docs", "data": "Scanning documents."}
                 )
@@ -142,9 +155,9 @@ async def listen_to_firestore_invoice_ws(
                 break  # this should send the last file or files and then stop the websocket
             await asyncio.sleep(MESSAGE_STREAM_DELAY)
 
-    except WebSocketDisconnect:
-        await websocket.close()
-        print("WebSocket closed.")
+    except WebSocketDisconnect as e:
+        print(f"WebSocket closed. {e}")
+        traceback.print_exc()
 
     except Exception as e:
         print(f"WebSocket connection failed: {e}")
@@ -158,7 +171,7 @@ async def listen_to_firestore_invoice_ws(
 
 
 @router.websocket("/{company_id}/listen-contract-updates")
-async def listen_to_firestore_contract(
+async def listen_to_firestore_contract_updates(
     websocket: WebSocket,
     company_id: str,
     token: str,
@@ -204,6 +217,7 @@ async def listen_to_firestore_contract(
                 break
 
             logging_doc = await logging_ref.get()
+            logging_doc_dict = logging_doc.to_dict()
             try:
                 docs = await document_ref.get()
                 current_docs = {key: value for key, value in docs.to_dict().items()}
@@ -218,7 +232,7 @@ async def listen_to_firestore_contract(
                 current_docs = {}
                 new_docs = {}
 
-            if logging_doc.to_dict()["is_scanning_docs"]:
+            if logging_doc_dict.get("is_scanning_docs"):
                 await websocket.send_json(
                     {"event": "scanning_docs", "data": "Scanning documents."}
                 )
@@ -256,7 +270,7 @@ async def listen_to_firestore_contract(
                 )
             except FileNotFoundError:
                 num_files_left = 0
-            if num_files_left == 0 and not logging_doc.to_dict()["is_processing_docs"]:
+            if num_files_left == 0 and not logging_doc_dict.get("is_processing_docs"):
                 # I haven't had the same issue with invoices, where they don't all show up
                 # after getting processed with contracts, but will leave this here, in case that
                 # issue comes up again
@@ -275,9 +289,9 @@ async def listen_to_firestore_contract(
                 break
             await asyncio.sleep(MESSAGE_STREAM_DELAY)
 
-    except WebSocketDisconnect:
-        await websocket.close()
-        print("WebSocket closed.")
+    except WebSocketDisconnect as e:
+        print(f"WebSocket closed. {e}")
+        traceback.print_exc()
 
     except Exception as e:
         print(f"WebSocket connection failed: {e}")
@@ -290,7 +304,7 @@ async def listen_to_firestore_contract(
 
 
 @router.websocket("/{company_id}/listen-delete-invoices")
-async def listen_to_firestore_invoices(
+async def listen_to_firestore_delete_invoices(
     websocket: WebSocket,
     company_id: str,
     token: str,
@@ -321,8 +335,9 @@ async def listen_to_firestore_invoices(
                 break
 
             logging_doc = await logging_ref.get()
+            logging_doc_dict = logging_doc.to_dict()
 
-            if logging_doc.to_dict()["is_deleting_docs"]:
+            if logging_doc_dict.get("is_deleting_docs"):
                 await websocket.send_json(
                     {"event": "deleting_invoices", "data": "Deleting Invoices"}
                 )
@@ -334,9 +349,9 @@ async def listen_to_firestore_invoices(
 
             await asyncio.sleep(MESSAGE_STREAM_DELAY)
 
-    except WebSocketDisconnect:
-        await websocket.close()
-        print("WebSocket closed.")
+    except WebSocketDisconnect as e:
+        print(f"WebSocket closed. {e}")
+        traceback.print_exc()
 
     except Exception as e:
         print(f"WebSocket connection failed: {e}")
@@ -348,7 +363,7 @@ async def listen_to_firestore_invoices(
 
 
 @router.websocket("/{company_id}/listen-delete-client-bill")
-async def listen_to_firestore_client_bill(
+async def listen_to_firestore_delete_client_bill(
     websocket: WebSocket,
     company_id: str,
     token: str,
@@ -380,8 +395,9 @@ async def listen_to_firestore_client_bill(
                 break
 
             logging_doc = await logging_ref.get()
+            logging_doc_dict = logging_doc.to_dict()
 
-            if logging_doc.to_dict()["is_deleting_docs"]:
+            if logging_doc_dict.get("is_deleting_docs"):
                 await websocket.send_json(
                     {"event": "deleting_client_bill", "data": "Deleting Client Bills"}
                 )
@@ -393,9 +409,9 @@ async def listen_to_firestore_client_bill(
 
             await asyncio.sleep(MESSAGE_STREAM_DELAY)
 
-    except WebSocketDisconnect:
-        await websocket.close()
-        print("WebSocket closed.")
+    except WebSocketDisconnect as e:
+        print(f"WebSocket closed. {e}")
+        traceback.print_exc()
 
     except Exception as e:
         print(f"WebSocket connection failed: {e}")
@@ -407,7 +423,7 @@ async def listen_to_firestore_client_bill(
 
 
 @router.websocket("/{company_id}/listen-delete-contract")
-async def listen_to_firestore_client_bill(
+async def listen_to_firestore_delete_contract(
     websocket: WebSocket,
     company_id: str,
     token: str,
@@ -438,8 +454,9 @@ async def listen_to_firestore_client_bill(
                 break
 
             logging_doc = await logging_ref.get()
+            logging_doc_dict = logging_doc.to_dict()
 
-            if logging_doc.to_dict()["is_deleting_docs"]:
+            if logging_doc_dict.get("is_deleting_docs"):
                 await websocket.send_json(
                     {"event": "deleting_client_bill", "data": "Deleting Client Bills"}
                 )
@@ -451,9 +468,9 @@ async def listen_to_firestore_client_bill(
 
             await asyncio.sleep(MESSAGE_STREAM_DELAY)
 
-    except WebSocketDisconnect:
-        await websocket.close()
-        print("WebSocket closed.")
+    except WebSocketDisconnect as e:
+        print(f"WebSocket closed. {e}")
+        traceback.print_exc()
 
     except Exception as e:
         print(f"WebSocket connection failed: {e}")
