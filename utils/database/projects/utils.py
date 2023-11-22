@@ -305,7 +305,7 @@ async def update_all_project_budgets(
                             print("Invalid action type")
                             break
                         if len(action.recursiveLevel) == 1:
-                            budget["division"].pop(action.recursiveLevel[0])
+                            budget["divisions"].pop(action.recursiveLevel[0])
                         else:
                             parent_level = action.recursiveLevel[:-1]
                             parent_item = get_data_by_recursive_level(budget["divisions"], parent_level)
