@@ -73,6 +73,13 @@ class UpdateBudgets(BaseModel):
     deleteSubDivisions: List[DeleteSubDivision] | None
 
 
+class UpdateCostCode(BaseModel):
+    type: str
+    number: float = None
+    name: str = None
+    recursiveLevel: List[int] = None
+
+
 class ActualsItem(BaseModel):
     changeOrder: str | None
     costCodeName: str
