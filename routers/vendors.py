@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import List
 
@@ -70,7 +71,7 @@ async def add_vendor(
             status_code=400, detail="Invalid Email or Phone Number entered."
         )
 
-    await push_to_firestore(
+    task1 = push_to_firestore(
         project_name=PROJECT_NAME,
         collection=company_id,
         data=full_data.dict(),
@@ -79,13 +80,14 @@ async def add_vendor(
         doc_collection_document="vendor-details",
     )
 
-    await push_update_to_firestore(
+    task2 = push_update_to_firestore(
         project_name=PROJECT_NAME,
         collection=company_id,
         data={full_data.uuid: new_summary_data.dict()},
         document="vendor-summary",
         sub_document_name="allVendors",
     )
+    _ = await asyncio.gather(task1, task2)
 
     return {
         "message": "Succesfully saved new vendor.",
@@ -109,7 +111,7 @@ async def update_vendor(
             status_code=400, detail="Invalid Email or Phone Number entered."
         )
 
-    await push_to_firestore(
+    task1 = push_to_firestore(
         project_name=PROJECT_NAME,
         collection=company_id,
         data=full_data.dict(),
@@ -118,13 +120,15 @@ async def update_vendor(
         doc_collection_document="vendor-details",
     )
 
-    await push_update_to_firestore(
+    task2 = push_update_to_firestore(
         project_name=PROJECT_NAME,
         collection=company_id,
         data={vendor_id: new_summary_data.dict()},
         document="vendor-summary",
         sub_document_name="allVendors",
     )
+
+    _ = await asyncio.gather(task1, task2)
 
     return {"message": "Succesfully updated vendor."}
 
@@ -135,19 +139,20 @@ async def delete_vendor(
 ):
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
-    await delete_collections_from_firestore(
+    task1 = delete_collections_from_firestore(
         project_name=PROJECT_NAME,
         company_id=company_id,
         data=data,
         document_name="vendors",
     )
 
-    await delete_summary_data_from_firestore(
+    task2 = delete_summary_data_from_firestore(
         project_name=PROJECT_NAME,
         company_id=company_id,
         data=data,
         document_name="vendor-summary",
         sub_document_name="allVendors",
     )
+    _ = asyncio.gather(task1, task2)
 
     return {"message": "Successfully deleted vendor(s)."}

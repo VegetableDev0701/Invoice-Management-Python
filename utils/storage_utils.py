@@ -97,6 +97,17 @@ async def move_blob_fs(
         await asyncio.to_thread(fs.mv, source_name, destination_name)
 
 
+async def save_updated_cost_codes_to_gcs(company_id: str, data: dict, bucket: str):
+    """
+    Saves data to a location in GCS.
+    """
+    bucket = get_storage_bucket(bucket)
+    file_name = f"cost-codes/{company_id}/cost-codes.json"
+
+    blob = bucket.blob(file_name)
+    blob.upload_from_string(data=json.dumps(data), content_type="application/json")
+
+
 def get_sub_dirs(
     storage_client: storage.Client,
     prefix: str | None = None,
@@ -195,34 +206,7 @@ def get_storage_bucket(bucket: str) -> storage.Client():
     return storage_client.get_bucket(bucket)
 
 
-def save_cv2_image(
-    hex_string: str, temp_file: str, destination_prefix: str, destination_filename: str
-) -> None:
-    """
-
-    Parameters
-    ----------
-    hex_string: str
-        The "byte string" in hex format from the database
-    company_id: str
-        Image size (width, height)
-    filename: str
-    """
-    bucket = get_storage_bucket("stak-customer-documents")
-    blob = bucket.blob(f"{destination_prefix}/{destination_filename}")
-    imgarr = np.frombuffer(bytes.fromhex(hex_string), np.uint8)
-    img_np = cv2.imdecode(imgarr, cv2.IMREAD_COLOR)
-    cv2.imwrite(temp_file, img_np, [cv2.IMWRITE_JPEG_QUALITY, 30])
-    blob.upload_from_filename(temp_file)
-
-
-def save_doc_dict(doc_dict: dict, destination: str):
-    bucket = get_storage_bucket("stak-customer-documents")
-    blob = bucket.blob(destination)
-    blob.upload_from_string(json.dumps(doc_dict), content_type="application/json")
-
-
-async def save_cv2_image_async(
+async def save_cv2_image(
     hex_string: str, temp_file: str, destination_prefix: str, destination_filename: str
 ) -> None:
     """
@@ -246,7 +230,7 @@ async def save_cv2_image_async(
     await loop.run_in_executor(None, upload_func)
 
 
-async def save_doc_dict_async(doc_dict: dict, destination: str):
+async def save_doc_dict(doc_dict: dict, destination: str):
     bucket = get_storage_bucket("stak-customer-documents")
     blob = bucket.blob(destination)
 
@@ -257,39 +241,67 @@ async def save_doc_dict_async(doc_dict: dict, destination: str):
     await loop.run_in_executor(None, upload_func)
 
 
-async def download_and_onboard_new_company_files(company_id: str):
-    storage_client = storage.Client()
-    bucket = storage_client.get_bucket("stak-company-files")
+async def download_and_onboard_new_company_files(company_id: str) -> None:
+    base_form_bucket = get_storage_bucket("stak-base-form-data")
+    cost_code_bucket = get_storage_bucket("stak-company-files")
 
     tasks = []
-    blobs = bucket.list_blobs(prefix="data/")
+    base_form_blobs = base_form_bucket.list_blobs()
+    cost_code_blob = cost_code_bucket.list_blobs(prefix=f"cost-codes/{company_id}/")
 
     base_kwargs = {
         "project_name": PROJECT_NAME,
         "collection": company_id,
     }
 
-    for blob in [x for x in blobs if re.search(r"json$", x.name)]:
+    # Load all the base form data for the new company
+    for blob in [x for x in base_form_blobs if re.search(r"json$", x.name)]:
+
         temp_dir = tempfile.mkdtemp()  # Create a temporary directory
         temp_file_path = pathlib.Path(temp_dir) / "temp.json"
 
         with open(temp_file_path, "wb") as temp_file:
             blob.download_to_filename(temp_file.name)
             kwargs = base_kwargs.copy()
-            if "cost-codes.json" in blob.name:
-                kwargs.update({"document": "cost-codes"})
-            else:
-                name = blob.name.split("/")[-1].split(".")[0]
-                kwargs.update(
-                    {
-                        "document": "base-forms",
-                        "doc_collection": "forms",
-                        "doc_collection_document": name,
-                    }
-                )
+            name = blob.name.split("/")[-1].split(".")[0]
+            kwargs.update(
+                {
+                    "document": "base-forms",
+                    "doc_collection": "forms",
+                    "doc_collection_document": name,
+                }
+            )
             kwargs.update({"path_to_json": temp_file.name})
             task = asyncio.create_task(push_to_firestore(**kwargs))
             task.add_done_callback(lambda future, path=temp_dir: shutil.rmtree(path))
             tasks.append(task)
 
-    await asyncio.gather(*tasks)
+    # load the specific company's cost codes if they exist, otherwise load a base empty cost code form
+    cost_code_blob_list = [x for x in cost_code_blob if re.search(r"json$", x.name)]
+    if cost_code_blob_list:
+        for blob in cost_code_blob_list:
+            temp_dir = tempfile.mkdtemp()  # Create a temporary directory
+            temp_file_path = pathlib.Path(temp_dir) / "temp.json"
+            with open(temp_file_path, "wb") as temp_file:
+                blob.download_to_filename(temp_file.name)
+                kwargs = base_kwargs.copy()
+                kwargs.update(
+                    {"document": "cost-codes", "path_to_json": temp_file.name}
+                )
+                task = asyncio.create_task(push_to_firestore(**kwargs))
+                task.add_done_callback(
+                    lambda future, path=temp_dir: shutil.rmtree(path)
+                )
+                tasks.append(task)
+    else:
+        temp_dir = tempfile.mkdtemp()  # Create a temporary directory
+        temp_file_path = pathlib.Path(temp_dir) / "temp.json"
+        with open(temp_file_path, "w+") as temp_file:
+            empty_cost_codes = {"format": "Custom", "updated": False, "divisions": []}
+            json.dump(empty_cost_codes, temp_file)
+            kwargs = base_kwargs.copy()
+            kwargs.update({"document": "cost-codes", "path_to_json": temp_file.name})
+            task = asyncio.create_task(push_to_firestore(**kwargs))
+            task.add_done_callback(lambda future, path=temp_dir: shutil.rmtree(path))
+            tasks.append(task)
+    _ = await asyncio.gather(*tasks)

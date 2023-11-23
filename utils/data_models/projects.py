@@ -164,9 +164,11 @@ class AddClientBillData(BaseModel):
     currentActualsChangeOrders: ChangeOrderActuals | ChangeOrderActualsV2 | None
     clientBillObj: ClientBillDataV2 | None
 
+      
 class UpdateClientBillData(BaseModel):
     invoices: Invoices | None
     clientBillSummary: BillSummary | None
     clientBillObj: ClientBillDataV2 | None
     labor: Labor | None
     laborSummary: List[LaborSummaryItem] | None
+

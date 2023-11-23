@@ -699,7 +699,8 @@ async def push_update_to_firestore(
                 else:
                     if sub_document_name:
                         for key, value in data.items():
-                            await document_ref.set(
+                            await document_ref.set({sub_document_name: {}})
+                            await document_ref.update(
                                 {f"{sub_document_name}.{key}": value}
                             )
                     else:

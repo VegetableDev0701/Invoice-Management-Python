@@ -171,7 +171,7 @@ async def create_files(
                 await out_file.write(content)
                 blob = bucket.blob(f"{bucket_prefix}/{filename}")
                 blob.upload_from_filename(out_file.name, content_type=file.content_type)
-    await asyncio.gather(*tasks)
+    _ = await asyncio.gather(*tasks)
 
     await push_update_to_firestore(
         project_name="stak-app",

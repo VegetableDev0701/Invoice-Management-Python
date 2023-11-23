@@ -45,6 +45,7 @@ class LineItems(BaseModel):
     bounding_box: BoundingBox | None = None
     page: float | None = None
     number_of_hours: int | None = None
+    billable: bool
 
 
 class LineItemObject(BaseModel):
@@ -60,11 +61,13 @@ class ProcessedInvoiceDataItem(BaseModel):
     change_order: ChangeOrderObject | None
     cost_code: str | None = None
     line_items_toggle: bool | None = None
-    # remove_from_change_order: str | None = None
     total_amount: str | None = None
     invoice_id: str | None = None
     date_received: str | None = None
     is_synced: str | None = None
+    invoice_date: str | None = None
+    is_credit: bool
+    billable: bool
 
 
 class ProcessedInvoiceData(BaseModel):

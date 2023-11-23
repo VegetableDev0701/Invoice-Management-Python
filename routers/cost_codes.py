@@ -1,12 +1,13 @@
+import asyncio
 import json
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 
 from config import PROJECT_NAME
 from utils.database.firestore import get_from_firestore, push_to_firestore
 from utils import auth
 from utils.data_models.budgets import CostCodes
+from utils.storage_utils import save_updated_cost_codes_to_gcs
 
 router = APIRouter()
 
@@ -34,11 +35,17 @@ async def update_cost_codes(
 ) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
-    await push_to_firestore(
+    task1 = push_to_firestore(
         project_name=PROJECT_NAME,
         collection=company_id,
         data=data.dict(),
         document="cost-codes",
     )
+
+    task2 = save_updated_cost_codes_to_gcs(
+        company_id=company_id, data=data.dict(), bucket="stak-company-files"
+    )
+
+    _ = asyncio.gather(task1, task2)
 
     return {"message": "Cost codes updated successfully."}

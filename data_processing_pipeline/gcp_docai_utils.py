@@ -26,8 +26,8 @@ from utils.documents.create_documents import create_document_object
 from utils.storage_utils import (
     get_sub_dirs,
     move_blob_fs,
-    save_cv2_image_async,
-    save_doc_dict_async,
+    save_cv2_image,
+    save_doc_dict,
 )
 from utils.database.firestore import push_to_firestore, push_update_to_firestore
 from utils.database.projects.utils import get_project_object
@@ -289,7 +289,7 @@ async def process_and_move_invoices(
         for i, img_hex in enumerate(img_hex_list):
             doc_img_path_list.append(f"DOC_IMG_PAGE_{i+1}_{img_filename}")
             with tempfile.NamedTemporaryFile(suffix=".jpg") as temp_file:
-                coroutine = save_cv2_image_async(
+                coroutine = save_cv2_image(
                     img_hex,
                     temp_file.name,
                     destination_prefix,
@@ -311,7 +311,7 @@ async def process_and_move_invoices(
         vendor_name = await get_vendor_name(doc_dict, full_text)
         doc_dict["predicted_supplier_name"] = vendor_name
 
-        task1 = save_doc_dict_async(
+        task1 = save_doc_dict(
             doc_dict, destination=f"{destination_prefix}/{doc_dict_filename}"
         )
 
@@ -455,7 +455,7 @@ async def process_and_move_contracts(
         doc_dict["summaryData"] = summary_data
 
         # push to db
-        task1 = save_doc_dict_async(
+        task1 = save_doc_dict(
             doc_dict, destination=f"{destination_prefix}/{doc_dict_filename}"
         )
 
