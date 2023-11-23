@@ -14,6 +14,7 @@ from tenacity import (
 )
 
 from utils.data_models.projects import AddClientBillData
+from utils.data_models.budgets import UpdateCostCode
 from utils.database import db_utils
 from utils.database.firestore import stream_entire_collection
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
@@ -212,9 +213,21 @@ def create_new_subdivision_budget_item(number: str, name: str) -> dict:
 def create_new_division_budget_item(number: str, name: str) -> dict:
     return {"number": float(number), "subdivisions": [], "name": name}
 
+def get_data_by_recursive_level(full_data, level):
+    if len(level) == 0:
+        return None
+    level_data = full_data[level[0]]
+    for i in range(1, len(level)):
+        index = level[i]
+        if not level_data.get('subItems') or len(level_data['subItems']) <= index:
+            print('[getDataByRecursiveLevel]: No data')
+            return None
+        level_data = level_data['subItems'][index]
+    return level_data
+
 
 async def update_all_project_budgets(
-    project_name: str, collection: str, document: str, data: dict
+    project_name: str, collection: str, document: str, data: list[UpdateCostCode]
 ) -> None:
     """
     Updates the budgets for all projects of a given company.
@@ -248,128 +261,70 @@ async def update_all_project_budgets(
             budget_snapshot = await project_budget_ref.get(transaction=transaction)
             budget = budget_snapshot.to_dict()
 
-            if data["deleteCostCodes"] is not None:
-                for delete_cost_code_item in data["deleteCostCodes"]:
-                    # If for some reason we try to delete something that exists in the master
-                    # cost code list, but not in one of the projects budget, this will guard
-                    # against the code breaking in this case.
-                    try:
-                        div_index = db_utils.find_index(
-                            budget["divisions"],
-                            "number",
-                            delete_cost_code_item["divisionNumber"],
-                        )
-                        sub_div_index = db_utils.find_index(
-                            budget["divisions"][div_index]["subdivisions"],
-                            "number",
-                            delete_cost_code_item["subDivNumber"],
-                        )
-                        cost_code_index = db_utils.find_index(
-                            budget["divisions"][div_index]["subdivisions"][
-                                sub_div_index
-                            ]["items"],
-                            "number",
-                            delete_cost_code_item["costCodeNumber"],
-                        )
-                        del budget["divisions"][div_index]["subdivisions"][
-                            sub_div_index
-                        ]["items"][cost_code_index]
-                    except IndexError as error:
-                        logger_project_utils.error(
-                            f"An indexerror occured when trying to update all project budgets: {error}; The delete cost code item is: {delete_cost_code_item}"
-                        )
-
-            if data["deleteSubDivisions"] is not None:
-                for delete_sub_div_item in data["deleteSubDivisions"]:
-                    try:
-                        div_index = db_utils.find_index(
-                            budget["divisions"],
-                            "number",
-                            delete_sub_div_item["divisionNumber"],
-                        )
-                        sub_div_index = db_utils.find_index(
-                            budget["divisions"][div_index]["subdivisions"],
-                            "number",
-                            delete_sub_div_item["subDivNumber"],
-                        )
-                        del budget["divisions"][div_index]["subdivisions"][
-                            sub_div_index
-                        ]
-                    except IndexError as error:
-                        logger_project_utils.error(
-                            f"An indexerror occured when trying to update all project budgets: {error}; The delete sub div item is: {delete_sub_div_item}"
-                        )
-
-            if data["deleteDivisions"] is not None:
-                for delete_div_item in data["deleteDivisions"]:
-                    try:
-                        div_index = db_utils.find_index(
-                            budget["divisions"],
-                            "number",
-                            delete_div_item["divisionNumber"],
-                        )
-                        del budget["divisions"][div_index]
-                    except IndexError as error:
-                        logger_project_utils.error(
-                            f"An indexerror occured when trying to update all project budgets: {error}; The delete div item is: {delete_div_item}"
-                        )
-
-            if data["addDivisions"] is not None:
-                for division_item in data["addDivisions"]:
-                    new_division_item = create_new_division_budget_item(
-                        number=division_item["number"], name=division_item["name"]
+            if budget is None:
+                return
+            
+            for action in data:
+                try:
+                    if action.type == "Create":
+                        if len(action.recursiveLevel) == 0 :
+                            new_division_item = {
+                                "name": action.name,
+                                "number": float(action.number),
+                                "subItems": []
+                            }
+                            budget["divisions"].append(new_division_item)
+                            sorted_divisions = sorted(
+                                budget["divisions"], key=lambda x: x["number"]
+                            )
+                            budget["divisions"] = sorted_divisions
+                        else :
+                            parent_item = get_data_by_recursive_level(budget["divisions"], action.recursiveLevel)
+                            new_cost_code = {
+                                "number": float(action.number),
+                                "name": action.name,
+                                "value": "0.00",
+                                "id": str(action.number),
+                                "required": False,
+                                "isCurrency": True,
+                                "inputType": "toggleInput",
+                                "subItems": []
+                            }
+                            if not parent_item.get("subItems") or len(parent_item["subItems"]) == 0:
+                                if parent_item.get("isCurrency"):
+                                    parent_item["isCurrency"] = False
+                                    parent_item["value"] = "0.00"
+                                parent_item["subItems"] = []
+                            parent_item["subItems"].append(new_cost_code)
+                            sorted_item = sorted(
+                                parent_item["subItems"], key=lambda x: x["number"]
+                            )
+                            parent_item["subItems"] = sorted_item
+                    elif action.type == "Delete" :
+                        if len(action.recursiveLevel) == 0:
+                            print("Invalid action type")
+                            break
+                        if len(action.recursiveLevel) == 1:
+                            budget["divisions"].pop(action.recursiveLevel[0])
+                        else:
+                            parent_level = action.recursiveLevel[:-1]
+                            parent_item = get_data_by_recursive_level(budget["divisions"], parent_level)
+                            if parent_item.get("subItems"):
+                                parent_item["subItems"].pop(action.recursiveLevel[-1])
+                            if len(parent_level) != 1 and not parent_item.get("subItems"):
+                                parent_item["isCurrency"] = True
+                                parent_item["value"] = "0.00"
+                    elif action.type == "Update":
+                        if len(action.recursiveLevel) == 0:
+                            print("Invalid action type")
+                            break
+                        item = get_data_by_recursive_level(budget["divisions"], action.recursiveLevel)
+                        item["name"] = action.name
+                        item["number"] = float(action.number)
+                except IndexError as error:
+                    logger_project_utils.error(
+                        f"An indexerror occured when trying to update all project budgets: {error}; The action is: {action}"
                     )
-                    budget["divisions"].append(new_division_item)
-                    sorted_divisions = sorted(
-                        budget["divisions"], key=lambda x: x["number"]
-                    )
-                    budget["divisions"] = sorted_divisions
-
-            if data["addSubDivisions"] is not None:
-                for subdivision_item in data["addSubDivisions"]:
-                    new_subdivision_item = create_new_subdivision_budget_item(
-                        number=subdivision_item["number"], name=subdivision_item["name"]
-                    )
-                    divInd = db_utils.find_index(
-                        budget["divisions"],
-                        "number",
-                        subdivision_item["divisionNumber"],
-                    )
-                    budget["divisions"][divInd]["subdivisions"].append(
-                        new_subdivision_item
-                    )
-                    sorted_subdivisions = sorted(
-                        budget["divisions"][divInd]["subdivisions"],
-                        key=lambda x: x["number"],
-                    )
-                    budget["divisions"][divInd]["subdivisions"] = sorted_subdivisions
-
-            if data["addCostCodes"] is not None:
-                for cost_code_item in data["addCostCodes"]:
-                    new_cost_code_item = create_new_cost_code_budget_item(
-                        number=cost_code_item["number"], name=cost_code_item["name"]
-                    )
-                    if new_cost_code_item is None:
-                        continue
-                    divInd = db_utils.find_index(
-                        budget["divisions"], "number", cost_code_item["divisionNumber"]
-                    )
-                    subDivInd = db_utils.find_index(
-                        budget["divisions"][divInd]["subdivisions"],
-                        "number",
-                        cost_code_item["subDivNumber"],
-                    )
-                    budget["divisions"][divInd]["subdivisions"][subDivInd][
-                        "items"
-                    ].append(new_cost_code_item)
-                    sorted_cost_code_items = sorted(
-                        budget["divisions"][divInd]["subdivisions"][subDivInd]["items"],
-                        key=lambda x: x["number"],
-                    )
-                    budget["divisions"][divInd]["subdivisions"][subDivInd][
-                        "items"
-                    ] = sorted_cost_code_items
-
             # Update the budget in the transaction
             transaction.update(project_budget_ref, budget)
 
