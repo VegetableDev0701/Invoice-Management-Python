@@ -39,6 +39,13 @@ TESTING = False
 
 app = FastAPI()
 
+dir_path = os.path.join('static')
+
+# Check if the directory exists
+if not os.path.exists(dir_path):
+    # Create the directory
+    os.makedirs(dir_path)
+
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.exception_handler(RequestValidationError)
