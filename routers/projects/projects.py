@@ -1,6 +1,8 @@
 import asyncio
 import json
 from typing import List
+import pandas as pd
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -8,7 +10,7 @@ from validation import io_validation
 from config import PROJECT_NAME
 from utils import auth
 from utils.data_models.projects import FullProjectDataToAdd
-from utils.data_models.charts import FullB2AData, FullB2ADataV2
+from utils.data_models.charts import B2AReportDataItem, FullB2ADataV2
 from utils.database.firestore import (
     get_all_project_details_data,
     push_to_firestore,
@@ -181,7 +183,7 @@ async def add_project(
     await asyncio.gather(task1, task2)
 
     return {
-        "message": "Succesfully added new project.",
+        "message": "Successfully added new project.",
     }
 
 
@@ -334,3 +336,36 @@ async def add_project_b2a_chart_data(
     )
 
     return {"message": "Successfully updated B2A Chart Data."}
+
+
+@router.post("/{company_id}/build-b2a-report")
+async def build_b2a_report(
+    company_id: str,
+    project_id: str,
+    data: List[B2AReportDataItem],
+    current_user=Depends(auth.get_current_user),
+) -> dict :
+    auth.check_user_data(company_id=company_id, current_user=current_user)
+    
+    report_data = {
+        'Service': [],
+        'Budget': [],
+        'Actual Costs': [],
+        'Difference': [],
+        '%': [],
+    }
+
+    for item in data:
+        report_data["Service"].append(item.title)
+        report_data["Budget"].append(item.budgetAmount)
+        report_data["Actual Costs"].append(item.actualAmount)
+        report_data["Difference"].append(item.difference)
+        report_data["%"].append(item.percent)
+
+    df = pd.DataFrame(report_data)
+
+    unique_filename = f"{uuid.uuid4()}.xlsx"
+
+    df.to_excel(f"static/{unique_filename}", index=False)
+
+    return {"message": "Successfully built B2A Report.", "download_url": unique_filename}

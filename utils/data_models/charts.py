@@ -109,3 +109,15 @@ class FullB2ADataV2(BaseModel):
     currentGrandTotal: Dict[str, float]
     currentBudgetedTotal: Dict[str, float]
     currentChangeOrderTotal: Dict[str, float]
+
+
+class B2AReportDataItem(BaseModel):
+    title: str
+    actualAmount: str
+    budgetAmount: str
+    difference: str
+    percent: str
+
+
+class B2AReportData(BaseModel):
+    __root__: Dict[str, B2AReportDataItem]

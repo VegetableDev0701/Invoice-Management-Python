@@ -7,6 +7,7 @@ from fastapi import FastAPI, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from utils.database.firestore import get_all_company_data
@@ -38,6 +39,7 @@ TESTING = False
 
 app = FastAPI()
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):

@@ -136,6 +136,7 @@ class BillSummary(BaseModel):
     totalsByChangeOrder: Dict[str, float]
     laborFeeIds: List[str] | None
     invoiceIds: List[str] | None
+    createdAt: str | None
 
 
 class InvoiceCurrentActualsV2(BaseModel):
