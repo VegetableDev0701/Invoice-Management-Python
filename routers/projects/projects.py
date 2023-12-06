@@ -2,7 +2,7 @@ import asyncio
 import json
 from typing import List
 import pandas as pd
-import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -364,7 +364,7 @@ async def build_b2a_report(
 
     df = pd.DataFrame(report_data)
 
-    unique_filename = f"{uuid.uuid4()}.xlsx"
+    unique_filename = f"{str(datetime.now()).replace(' ', '_').replace(':', '-').split('.')[0]}.xlsx"
 
     df.to_excel(f"static/{unique_filename}", index=False)
 
