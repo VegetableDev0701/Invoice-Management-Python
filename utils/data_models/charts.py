@@ -111,13 +111,18 @@ class FullB2ADataV2(BaseModel):
     currentChangeOrderTotal: Dict[str, float]
 
 
-class B2AReportDataItem(BaseModel):
+class BaseReportDataItem(BaseModel):
     title: str
-    actualAmount: str
     budgetAmount: str
+    actualAmount: str
     difference: str
     percent: str
+    depth: int
 
 
-class B2AReportData(BaseModel):
-    __root__: Dict[str, B2AReportDataItem]
+class B2AReport(BaseModel):
+    service: List[BaseReportDataItem]
+    serviceTotal: BaseReportDataItem
+    changeOrder: List[BaseReportDataItem]
+    changeOrderTotal: BaseReportDataItem
+    grandTotal: BaseReportDataItem
