@@ -123,6 +123,9 @@ class BaseReportDataItem(BaseModel):
 class B2AReport(BaseModel):
     service: List[BaseReportDataItem]
     serviceTotal: BaseReportDataItem
+    otherCharges: List[BaseReportDataItem]
+    otherChargesTotal: BaseReportDataItem
+    contractTotal: BaseReportDataItem
     changeOrder: List[BaseReportDataItem]
     changeOrderTotal: BaseReportDataItem
     grandTotal: BaseReportDataItem

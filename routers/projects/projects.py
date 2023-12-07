@@ -361,6 +361,18 @@ async def build_b2a_report(
     
     project_utils.convert_report_data_to_list(report_data, data.serviceTotal)
 
+    report_data["Service"].append('Other Charges')
+    report_data["Budget"].append('')
+    report_data["Actual Costs"].append('')
+    report_data["Difference"].append('')
+    report_data["%"].append('')
+
+    for item in data.otherCharges:
+        project_utils.convert_report_data_to_list(report_data, item)
+    
+    project_utils.convert_report_data_to_list(report_data, data.otherChargesTotal)
+    project_utils.convert_report_data_to_list(report_data, data.contractTotal)
+
     # add empty line
     report_data["Service"].append('')
     report_data["Budget"].append('')
