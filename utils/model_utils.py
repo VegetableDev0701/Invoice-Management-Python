@@ -11,6 +11,7 @@ from tenacity import (
     RetryError,
     before_sleep_log,
 )
+from config import Config
 
 from utils.retry_utils import OPENAI_RETRYABLE_EXCEPTIONS
 from global_vars.globals_io import RETRY_TIMES
@@ -50,12 +51,16 @@ num_tokens_logger.addHandler(handler_num_tokens)
 async def get_completion_gpt4(
     messages: str,
     max_tokens: int,
-    model: str = "gpt-4",
+    model: str = Config.GPT4_TURBO_LATEST_PREVIEW,
     temperature: float = 0.3,
     job_type: str | None = None,
 ):
     num_tokens = num_tokens_from_messages(messages=messages)
     num_tokens_logger.info(f"Job: {job_type}; Input tokens: {num_tokens}")
+    if job_type == "line_item_description":
+        response_type = "text"
+    else:
+        response_type = "json_object"
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
@@ -69,6 +74,7 @@ async def get_completion_gpt4(
                 try:
                     response = await openai.ChatCompletion.acreate(
                         model=model,
+                        response_format={"type": response_type},
                         messages=messages,
                         temperature=temperature,
                         max_tokens=max_tokens,
@@ -98,12 +104,16 @@ async def get_completion_gpt4(
 async def get_completion_gpt35(
     messages: str,
     max_tokens: int,
-    model: str = "gpt-3.5-turbo-16k",
+    model: str = Config.GPT35_TURBO_LATEST,
     temperature: float = 0.3,
     job_type: str | None = None,
 ):
     num_tokens = num_tokens_from_messages(messages=messages)
     num_tokens_logger.info(f"Job: {job_type}; Input tokens: {num_tokens}")
+    if job_type == "line_item_description":
+        response_type = "text"
+    else:
+        response_type = "json_object"
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
@@ -117,6 +127,7 @@ async def get_completion_gpt35(
                 response = await openai.ChatCompletion.acreate(
                     model=model,
                     messages=messages,
+                    response_format={"type": response_type},
                     temperature=temperature,
                     max_tokens=max_tokens,
                 )
@@ -135,13 +146,13 @@ async def get_completion_gpt35(
         raise
 
 
-def num_tokens_from_messages(messages, model="gpt-3.5-turbo"):
+def num_tokens_from_messages(messages, model=Config.GPT35_TURBO):
     messages = [{"role": "user", "content": messages}]
     try:
         encoding = tiktoken.encoding_for_model(model)
     except KeyError:
         encoding = tiktoken.get_encoding("cl100k_base")
-    if model == "gpt-3.5-turbo":  # note: future models may deviate from this
+    if model == Config.GPT35_TURBO:  # note: future models may deviate from this
         num_tokens = 0
         for message in messages:
             num_tokens += (

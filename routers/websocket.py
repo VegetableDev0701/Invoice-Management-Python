@@ -52,8 +52,6 @@ async def listen_to_firestore_invoice_updates(
         initial_docs = {doc.id: doc.to_dict() async for doc in collection_ref.stream()}
 
         while True:
-            print(websocket.client_state)
-            # check websocket connection
             try:
                 if websocket.client_state == WebSocketState.CONNECTED:
                     await websocket.send_json({"event": "heartbeat", "data": "ping"})

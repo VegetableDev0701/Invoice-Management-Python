@@ -119,10 +119,15 @@ async def get_project_object(
     """
     db = firestore.AsyncClient(project=project_name)
     try:
-        project_summary_ref = db.collection(company_id).document(document_name)
+        project_summary_ref = (
+            db.collection(company_id)
+            .document("projects")
+            .collection(project_id)
+            .document(document_name)
+        )
+
         doc = await project_summary_ref.get()
-        doc = doc.to_dict()
-        project = doc["allProjects"][project_id]
+        project = doc.to_dict()
         project_obj = {
             "name": project["projectName"],
             "address": project["address"],
@@ -214,17 +219,19 @@ def create_new_subdivision_budget_item(number: str, name: str) -> dict:
 def create_new_division_budget_item(number: str, name: str) -> dict:
     return {"number": float(number), "subdivisions": [], "name": name}
 
+
 def get_data_by_recursive_level(full_data, level):
     if len(level) == 0:
         return None
     level_data = full_data[level[0]]
     for i in range(1, len(level)):
         index = level[i]
-        if not level_data.get('subItems') or len(level_data['subItems']) <= index:
-            print('[getDataByRecursiveLevel]: No data')
+        if not level_data.get("subItems") or len(level_data["subItems"]) <= index:
+            print("[getDataByRecursiveLevel]: No data")
             return None
-        level_data = level_data['subItems'][index]
+        level_data = level_data["subItems"][index]
     return level_data
+
 
 def convert_report_data_to_list(list: dict[str, list], data: BaseReportDataItem):
     list["Service"].append(data.title)
@@ -232,6 +239,7 @@ def convert_report_data_to_list(list: dict[str, list], data: BaseReportDataItem)
     list["Actual Costs"].append(data.actualAmount)
     list["Difference"].append(data.difference)
     list["%"].append(data.percent)
+
 
 async def update_all_project_budgets(
     project_name: str, collection: str, document: str, data: list[UpdateCostCode]
@@ -270,23 +278,25 @@ async def update_all_project_budgets(
 
             if budget is None:
                 return
-            
+
             for action in data:
                 try:
                     if action.type == "Create":
-                        if len(action.recursiveLevel) == 0 :
+                        if len(action.recursiveLevel) == 0:
                             new_division_item = {
                                 "name": action.name,
                                 "number": float(action.number),
-                                "subItems": []
+                                "subItems": [],
                             }
                             budget["divisions"].append(new_division_item)
                             sorted_divisions = sorted(
                                 budget["divisions"], key=lambda x: x["number"]
                             )
                             budget["divisions"] = sorted_divisions
-                        else :
-                            parent_item = get_data_by_recursive_level(budget["divisions"], action.recursiveLevel)
+                        else:
+                            parent_item = get_data_by_recursive_level(
+                                budget["divisions"], action.recursiveLevel
+                            )
                             new_cost_code = {
                                 "number": float(action.number),
                                 "name": action.name,
@@ -295,9 +305,12 @@ async def update_all_project_budgets(
                                 "required": False,
                                 "isCurrency": True,
                                 "inputType": "toggleInput",
-                                "subItems": []
+                                "subItems": [],
                             }
-                            if not parent_item.get("subItems") or len(parent_item["subItems"]) == 0:
+                            if (
+                                not parent_item.get("subItems")
+                                or len(parent_item["subItems"]) == 0
+                            ):
                                 if parent_item.get("isCurrency"):
                                     parent_item["isCurrency"] = False
                                     parent_item["value"] = "0.00"
@@ -307,7 +320,7 @@ async def update_all_project_budgets(
                                 parent_item["subItems"], key=lambda x: x["number"]
                             )
                             parent_item["subItems"] = sorted_item
-                    elif action.type == "Delete" :
+                    elif action.type == "Delete":
                         if len(action.recursiveLevel) == 0:
                             print("Invalid action type")
                             break
@@ -315,17 +328,23 @@ async def update_all_project_budgets(
                             budget["divisions"].pop(action.recursiveLevel[0])
                         else:
                             parent_level = action.recursiveLevel[:-1]
-                            parent_item = get_data_by_recursive_level(budget["divisions"], parent_level)
+                            parent_item = get_data_by_recursive_level(
+                                budget["divisions"], parent_level
+                            )
                             if parent_item.get("subItems"):
                                 parent_item["subItems"].pop(action.recursiveLevel[-1])
-                            if len(parent_level) != 1 and not parent_item.get("subItems"):
+                            if len(parent_level) != 1 and not parent_item.get(
+                                "subItems"
+                            ):
                                 parent_item["isCurrency"] = True
                                 parent_item["value"] = "0.00"
                     elif action.type == "Update":
                         if len(action.recursiveLevel) == 0:
                             print("Invalid action type")
                             break
-                        item = get_data_by_recursive_level(budget["divisions"], action.recursiveLevel)
+                        item = get_data_by_recursive_level(
+                            budget["divisions"], action.recursiveLevel
+                        )
                         item["name"] = action.name
                         item["number"] = float(action.number)
                 except IndexError as error:
@@ -556,6 +575,62 @@ async def update_client_bill_details(
         return {"message": "Error updating client bill."}
     finally:   
         db.close()
+
+async def update_client_bill_details(
+    project_name: str, collection: str, project_id: str, client_bill_id: str, data: dict
+):
+    db = firestore.AsyncClient(project=project_name)
+
+    invoices = data.invoices
+    labor = data.labor
+    laborSummary = data.laborSummary
+    bill_summary = data.clientBillSummary
+    bill_work_description = data.clientBillObj
+    try:
+        client_bill_ref = (
+            db.collection(collection)
+            .document("projects")
+            .collection(project_id)
+            .document("client-bills")
+            .collection(client_bill_id)
+        )
+
+        if invoices is not None:
+            invoices_dict = invoices.dict()
+            await client_bill_ref.document("invoices").set(invoices_dict["__root__"])
+        if labor is not None:
+            labor_dict = labor.dict()
+            await client_bill_ref.document("labor").set(labor_dict["__root__"])
+        if laborSummary is not None:
+            laborSummary_dict = {
+                f"{item.uuid}": item.dict() for index, item in enumerate(laborSummary)
+            }
+            await client_bill_ref.document("labor-summary").set(laborSummary_dict)
+        if bill_work_description is not None:
+            await client_bill_ref.document("bill-work-description").set(
+                bill_work_description.dict()
+            )
+
+        client_bill_summary_ref = (
+            db.collection(collection)
+            .document("projects")
+            .collection(project_id)
+            .document("client-bills-summary")
+        )
+        doc = await client_bill_summary_ref.get()
+        client_bill_summary_data = doc.to_dict()
+
+        client_bill_summary_data[client_bill_id] = bill_summary.dict()
+
+        await client_bill_summary_ref.set(client_bill_summary_data)
+        return {"status": "success"}
+
+    except Exception as e:
+        logger_project_utils.exception(f"Error updating client bill: {e}")
+        return {"message": "Error updating client bill."}
+    finally:
+        db.close()
+
 
 async def copy_doc_to_db(
     destination_snapshot: firestore.DocumentSnapshot | None,

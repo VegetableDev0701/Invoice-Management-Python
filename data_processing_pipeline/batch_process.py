@@ -77,7 +77,7 @@ async def process_batch_process(
 
         # sync
         try:
-            operation.result(timeout=timeout)
+            _ = operation.result(timeout=timeout)
         # Catch exception when operation doesn't finish before timeout
         except (RetryError, InternalServerError) as e:
             print(e.message)
@@ -99,7 +99,7 @@ async def process_batch_process(
         while (
             operation.metadata.state != documentai.BatchProcessMetadata.State.SUCCEEDED
         ):
-            await asyncio.sleep(2)
+            await asyncio.sleep(5)
 
     metadata = documentai.BatchProcessMetadata(operation.metadata)
     if metadata.state != documentai.BatchProcessMetadata.State.SUCCEEDED:

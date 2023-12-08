@@ -5,7 +5,7 @@ from utils.data_models.formdata import MainCategories
 
 
 class AddVendordata(BaseModel):
-    name: str
+    name: str | None = None
     mainCategories: List[MainCategories]
     vendorId: str | None = None
     uuid: str | None = None
@@ -16,18 +16,18 @@ class AddVendordata(BaseModel):
 
 
 class SummaryVendorData(BaseModel):
-    vendorName: str
-    email: str
-    address: str
-    city: str
-    state: str
-    zipCode: str
-    businessLicNumber: str
-    businessLicExpirationDate: str
-    insuranceName: str
-    insuranceExpirationDate: str
-    landiLicNumber: str
-    landiExpirationDate: str
+    vendorName: str | None = None
+    email: str | None = None
+    address: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zipCode: str | None = None
+    businessLicNumber: str | None = None
+    businessLicExpirationDate: str | None = None
+    insuranceName: str | None = None
+    insuranceExpirationDate: str | None = None
+    landiLicNumber: str | None = None
+    landiExpirationDate: str | None = None
 
     class Config:
         extra = Extra.allow
@@ -37,3 +37,17 @@ class SummaryVendorData(BaseModel):
 class FullVendorDataToAdd(BaseModel):
     fullData: AddVendordata
     summaryData: SummaryVendorData
+
+
+class FullBulkVendorDataToAdd(BaseModel):
+    fullData: Dict[str, AddVendordata]
+    summaryData: Dict[str, SummaryVendorData]
+
+
+class PredictedVendorModel(BaseModel):
+    supplier_name: str | None
+    isGPT: bool
+    score: str | None = None
+    uuid: str | None = None
+    agave_uuid: str | None = None
+    vendor_match_conf_score: float | None

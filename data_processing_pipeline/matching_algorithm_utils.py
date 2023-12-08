@@ -12,10 +12,12 @@ import openai
 from thefuzz import process, fuzz
 from sentence_transformers import SentenceTransformer, util
 
-from config import Config
+from config import Config, PROJECT_NAME
 from utils import model_utils
+from utils.database.firestore import fetch_all_vendor_summaries, get_from_firestore
 from global_vars.globals_invoice import PROJECT_ENTITIES_FOR_MATCHING
 from global_vars.prompts import Prompts
+from utils.data_models.vendors import PredictedVendorModel
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -288,7 +290,7 @@ async def get_matches_from_document(
     use_fuzzy_matching: bool | None = None,
     address_choices: list[str] | None = None,
     owner_choices: list[str] | None = None,
-) -> str:
+) -> Tuple[str, str]:
     """Generates a query string to match the document to a project.
 
     The function uses regular expressions and/or fuzzy matching to match patterns
@@ -375,7 +377,7 @@ async def get_vendor_name(
     doc_dict: dict,
     full_text: str,
     score_cutoff: float = Config.VENDOR_NAME_CONFIDENCE_CUTOFF,
-) -> str:
+) -> dict:
     """
     Gets the supplier's name based on the provided documents and criteria.
 
@@ -427,6 +429,7 @@ async def get_vendor_name(
                         {
                             "supplier_name": ent["entity_value_norm"],
                             "score": ent["confidence_score"],
+                            "isGPT": False,
                         }
                     )
                 else:
@@ -434,6 +437,7 @@ async def get_vendor_name(
                         {
                             "supplier_name": ent["entity_value_raw"],
                             "score": ent["confidence_score"],
+                            "isGPT": False,
                         }
                     )
         elif ent["entity_type_major"] == "remit_to_name":
@@ -462,6 +466,7 @@ async def get_vendor_name(
                         {
                             "supplier_name": ent["entity_value_norm"],
                             "score": ent["confidence_score"],
+                            "isGPT": False,
                         }
                     )
                 else:
@@ -469,6 +474,7 @@ async def get_vendor_name(
                         {
                             "supplier_name": ent["entity_value_raw"],
                             "score": ent["confidence_score"],
+                            "isGPT": False,
                         }
                     )
 
@@ -504,3 +510,98 @@ async def get_vendor_name(
             f"An error occured while extracting vendor_name from document: {e}"
         )
         return {"supplier_name": error_log["supplier_name"], "isGPT": False}
+
+
+async def match_predicted_vendor(
+    company_id: str, pred_vendor_name_dict: dict | None
+) -> PredictedVendorModel:
+    """
+    Match the predicted vendor name to the list of vendors from the quickbooks-desktop
+    data in Firestore. This is the master list of Vendor's from QBD that includes
+    the Agave UUID needed to send data back to QBD.
+
+    params:
+        vendor_name(str): the predicted vendor name from the processing step
+    returns:
+        matched_vendor_name(dict): the vendor name and uuid
+    """
+
+    all_vendors_dict = await fetch_all_vendor_summaries(
+        company_id=company_id, project_name=PROJECT_NAME
+    )
+
+    if all_vendors_dict:
+        vendor_name_list = [
+            {
+                "name": vendor.get("vendorName"),
+                "agave_uuid": vendor.get("agaveId"),
+                "uuid": vendor.get("uuid"),
+            }
+            for vendor in all_vendors_dict
+        ]
+
+        # init model with all vendor names
+        model, vendors_emb = init_sentence_similarity_model(
+            [x["name"] for x in vendor_name_list]
+        )
+
+        # check if this is an invoice or contract
+        if pred_vendor_name_dict.get("supplier_name"):
+            vendor_name = pred_vendor_name_dict["supplier_name"]
+            is_invoice = True
+        elif pred_vendor_name_dict.get("vendor"):
+            vendor_name = pred_vendor_name_dict["vendor"]
+            is_invoice = False
+        else:
+            pred_vendor_name_dict.update(
+                {
+                    "agave_uuid": None,
+                    "vendor_match_conf_score": None,
+                }
+            )
+            return pred_vendor_name_dict
+
+        # create the query embedding from the predicted vendor name
+        vendor_name_emb = model.encode(vendor_name, convert_to_tensor=False)
+
+        scores = util.cos_sim(vendor_name_emb, vendors_emb)[0].cpu().tolist()
+
+        max_value = max(scores)
+        max_index = scores.index(max_value)
+
+        if max_value > Config.PREDICTION_CONFIDENCE_CUTOFF:  # currently set 0.6
+            if is_invoice:
+                return {
+                    "supplier_name": vendor_name_list[max_index]["name"],
+                    "agave_uuid": vendor_name_list[max_index]["agave_uuid"],
+                    "uuid": vendor_name_list[max_index]["uuid"],
+                    "vendor_match_conf_score": scores[max_index],
+                    "isGPT": pred_vendor_name_dict.get("isGPT"),
+                    "score": pred_vendor_name_dict.get("score"),
+                }
+            else:
+                pred_vendor_name_dict.update(
+                    {
+                        "vendor": vendor_name_list[max_index]["name"],
+                        "agave_uuid": vendor_name_list[max_index]["agave_uuid"],
+                        "uuid": vendor_name_list[max_index]["uuid"],
+                        "vendor_match_conf_score": scores[max_index],
+                    }
+                )
+        else:
+            pred_vendor_name_dict.update(
+                {
+                    "agave_uuid": None,
+                    "vendor_match_conf_score": None,
+                }
+            )
+
+    else:
+        pred_vendor_name_dict.update(
+            {
+                "agave_uuid": None,
+                "vendor_match_conf_score": None,
+            }
+        )
+
+    return pred_vendor_name_dict

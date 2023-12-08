@@ -1,6 +1,6 @@
 import os
 import json
-import time
+import traceback
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -20,6 +20,7 @@ from data_processing_pipeline.matching_algorithm_utils import (
     get_data_for_predictions,
     make_project_prediction,
     get_vendor_name,
+    match_predicted_vendor,
 )
 from utils import io_utils, contract_helpers, model_utils
 from utils.documents.create_documents import create_document_object
@@ -180,7 +181,6 @@ async def batch_process_contracts(
             )
 
         await process_async(metadata)
-    # print(f"{round(time.time() - start, 2)} seconds")
 
 
 async def process_and_move_invoices(
@@ -299,17 +299,16 @@ async def process_and_move_invoices(
         await asyncio.gather(*tasks)
         doc_dict["gcs_img_uri"] = doc_img_path_list
 
-        # TODO add in the predicted supplier when there is a list of vendors for that user
-        # Steps:
-        # 1. get all vendors from companies data and put in a list
-        # 2. Pull the supplier name, and remit to name...all names that could be associated with supplier
-        # 3. Do sentence similarity match to those values and the actual vendors in the list.
-        # 4. Pick best match, and if no matches just use the supplier name
-        # 5. See how many don't match, or are wrong and then implement chat gpt
-
         full_text = doc_dict["full_document_text"].replace("\n", " ").strip()
-        vendor_name = await get_vendor_name(doc_dict, full_text)
-        doc_dict["predicted_supplier_name"] = vendor_name
+        pred_vendor_name_dict = await get_vendor_name(doc_dict, full_text)
+        try:
+            matched_vendor_name = await match_predicted_vendor(
+                company_id=company_id, pred_vendor_name_dict=pred_vendor_name_dict
+            )
+        except Exception as e:
+            print(traceback.print_exc())
+
+        doc_dict["predicted_supplier_name"] = matched_vendor_name
 
         task1 = save_doc_dict(
             doc_dict, destination=f"{destination_prefix}/{doc_dict_filename}"
@@ -444,11 +443,15 @@ async def process_and_move_contracts(
             prompt.contract_prompt, max_tokens=250, job_type="parsing_contract"
         )
 
-        summary_data = json.loads(gpt_response)
+        summary_data: dict = json.loads(gpt_response)
 
-        project_obj = await get_project_object(
+        task1 = match_predicted_vendor(
+            company_id=company_id, pred_vendor_name_dict=summary_data
+        )
+        task2 = get_project_object(
             PROJECT_NAME, company_id, "project-summary", project_id
         )
+        summary_data, project_obj = await asyncio.gather(task1, task2)
 
         summary_data["projectName"] = project_obj["name"]
 

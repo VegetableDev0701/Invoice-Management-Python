@@ -112,7 +112,7 @@ async def remove_change_order_from_labor_data(
         db.close()
 
 
-def update_target_value(target_id, input_elements, set_value):
+def _update_target_value(target_id, input_elements, set_value):
     for element in input_elements:
         if is_input_element_with_items(element):
             found_item = next(

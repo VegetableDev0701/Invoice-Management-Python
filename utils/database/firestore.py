@@ -1,3 +1,4 @@
+import asyncio
 from typing import List
 import json
 import logging
@@ -75,30 +76,160 @@ async def get_from_firestore(
         db.close()
 
 
+async def fetch_document(coll, doc_name):
+    """Fetch a document and return its contents along with its collection ID and document name."""
+    doc = await coll.document(doc_name).get()
+    return coll.id, doc_name, doc.to_dict()
+
+
 async def get_all_project_details_data(
     project_name: str,
     collection_name: str,
     document_name: str,
-    details_doc_name: str,
+    doc_names: str | List[str],
 ):
     """
     Used to collect all the details data. Used to grab all project details, vendor
     details, contracts etc. This will pull all the details for any group needed.
     """
     db = firestore.AsyncClient(project=project_name)
+    tasks = []
     try:
-        collections = (
-            db.collection(collection_name).document(document_name).collections()
-        )
+        ref = db.collection(collection_name).document(document_name)
+        async for collection in ref.collections():
+            if isinstance(doc_names, list):
+                for doc_name in doc_names:
+                    task = asyncio.create_task(fetch_document(collection, doc_name))
+                    tasks.append(task)
+            else:
+                task = asyncio.create_task(fetch_document(collection, doc_names))
+                tasks.append(task)
+        results = await asyncio.gather(*tasks)
+
         docs = {}
-        async for collection in collections:
-            doc = await collection.document(details_doc_name).get()
-            docs[collection.id] = doc.to_dict()
+        for coll_id, doc_name, doc_data in results:
+            if coll_id not in docs:
+                docs[coll_id] = {}
+            docs[coll_id][doc_name] = doc_data
         return docs
+
     except Exception as e:
         firestore_io_logger.exception(
             f"An error occurred getting all project details: {e}"
         )
+    finally:
+        db.close()
+
+
+async def fetch_project_document(doc_ref):
+    try:
+        doc = await doc_ref.get()
+        return doc.id, doc.to_dict()
+    except:
+        raise
+
+
+async def fetch_project_if_active(
+    db: firestore.AsyncClient, company_id: str, project_id: str
+):
+    try:
+        project_collection_ref = (
+            db.collection(company_id).document("projects").collection(project_id)
+        )
+        project_summary_ref = project_collection_ref.document("project-summary")
+        project_summary = await project_summary_ref.get()
+
+        if project_summary.exists and project_summary.to_dict().get("isActive", False):
+            docs = project_collection_ref.list_documents()
+
+            tasks = [
+                asyncio.create_task(fetch_project_document(doc))
+                async for doc in docs
+                if doc.id != "client-bills"
+            ]
+            results = await asyncio.gather(*tasks)
+            return {project_id: dict(results)}
+        return None
+    except:
+        raise
+
+
+async def fetch_all_active_projects(company_id: str, project_name: str):
+    db = firestore.AsyncClient(project=project_name)
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(RETRY_TIMES),
+            wait=wait_exponential_jitter(),
+            retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+            reraise=True,
+            before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
+        ):
+            with attempt:
+                project_doc_ref = db.collection(company_id).document("projects")
+                tasks = []
+                async for collection in project_doc_ref.collections():
+                    tasks.append(
+                        asyncio.create_task(
+                            fetch_project_if_active(
+                                db=db, company_id=company_id, project_id=collection.id
+                            )
+                        )
+                    )
+                project_data_list = await asyncio.gather(*tasks)
+                return {k: v for d in project_data_list if d for k, v in d.items()}
+    except RetryError as e:
+        firestore_io_logger.error(
+            f"{e} occured while trying to get data from firestore"
+        )
+        raise
+
+    except Exception as e:
+        firestore_io_logger.exception(f"An error occurred getting data: {e}")
+    finally:
+        db.close()
+
+
+async def fetch_vendor_summary(db, company_id: str, vendor_id: str) -> dict:
+    try:
+        vendor_collection_ref = (
+            db.collection(company_id).document("vendors").collection(vendor_id)
+        )
+        vendor_summary_ref = vendor_collection_ref.document("vendor-summary")
+        vendor_summary_doc = await vendor_summary_ref.get()
+        return vendor_summary_doc.to_dict()
+    except:
+        raise
+
+
+async def fetch_all_vendor_summaries(company_id: str, project_name: str):
+    db = firestore.AsyncClient(project=project_name)
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(RETRY_TIMES),
+            wait=wait_exponential_jitter(),
+            retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+            reraise=True,
+            before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
+        ):
+            with attempt:
+                vendor_ref = db.collection(company_id).document("vendors")
+                tasks = [
+                    fetch_vendor_summary(db, company_id, vendor_id=coll.id)
+                    async for coll in vendor_ref.collections()
+                ]
+
+                results = await asyncio.gather(*tasks)
+
+                return results
+
+    except RetryError as e:
+        firestore_io_logger.error(
+            f"{e} occured while trying to get data from firestore"
+        )
+        raise
+
+    except Exception as e:
+        firestore_io_logger.exception(f"An error occurred getting data: {e}")
     finally:
         db.close()
 
@@ -116,14 +247,15 @@ async def stream_all_project_data(
             .document(document_name)
             .collection(project_id)
         )
-
         project_data = {}
-        async for doc in project_collection_ref.list_documents():
-            if doc.id == "client-bills":
-                continue
-            else:
-                doc = await doc.get()
-                project_data[doc.id] = doc.to_dict()
+        tasks = [
+            asyncio.create_task(fetch_project_document(doc))
+            async for doc in project_collection_ref.list_documents()
+            if doc.id != "client-bills"
+        ]
+        results = await asyncio.gather(*tasks)
+        for doc_id, doc_dict in results:
+            project_data[doc_id] = doc_dict
         return project_data
     except Exception as e:
         firestore_io_logger.exception(
@@ -298,6 +430,7 @@ async def delete_collections_from_firestore(
                         .document(document_name)
                         .collection(collection_name)
                     )
+
                     async for doc in collection_ref.stream():
                         if doc.id in data:
                             await doc.reference.delete()
@@ -313,10 +446,15 @@ async def delete_collections_from_firestore(
                         collection_ref = collection_ref.collection(
                             doc_collection_name
                         ).document(doc_collection_doc_name)
+                    tasks = []
                     async for coll in collection_ref.collections():
                         if coll.id in data:
-                            async for doc in coll.stream():
-                                await doc.reference.delete()
+                            tasks.append(
+                                [doc.reference.delete() async for doc in coll.stream()]
+                            )
+                    _ = await asyncio.gather(
+                        *[item for sublist in tasks for item in sublist]
+                    )
 
     except RetryError as e:
         firestore_io_logger.error(
@@ -728,13 +866,6 @@ async def update_project_status(
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     try:
-        document_ref_summary = db.collection(collection).document("project-summary")
-        for key, value in data.items():
-            for item_id in item_ids:
-                await document_ref_summary.update(
-                    {f"allProjects.{item_id}.{key}": value}
-                )
-
         for item_id in item_ids:
             document_ref_full_data = (
                 db.collection(collection)
@@ -742,8 +873,16 @@ async def update_project_status(
                 .collection(item_id)
                 .document("project-details")
             )
+            document_ref_summary = (
+                db.collection(collection)
+                .document("projects")
+                .collection(item_id)
+                .document("project-summary")
+            )
             for key, value in data.items():
-                await document_ref_full_data.update({key: value})
+                task1 = document_ref_full_data.update({key: value})
+                task2 = document_ref_summary.update({key: value})
+            _ = await asyncio.gather(task1, task2)
     except Exception as e:
         firestore_io_logger.exception(
             f"An error occurred updating project status {collection}: {e}"

@@ -50,13 +50,16 @@ async def get_agave_customer_id(
             before_sleep=before_sleep_log(ar_invoice_logger, logging.DEBUG),
         ):
             with attempt:
-                qbd_data_ref = db.collection(company_id).document(
-                    "quickbooks-desktop-data"
+                qbd_customer_ref = (
+                    db.collection(company_id)
+                    .document("quickbooks-desktop-data")
+                    .collection("customers")
+                    .document("customers")
                 )
-                doc = await qbd_data_ref.get()
+                doc = await qbd_customer_ref.get()
                 if not doc.exists:
                     return None
-                customers = doc.to_dict()["customers"]["data"]
+                customers = doc.to_dict()["data"]
                 for customer in customers:
                     if (
                         customer["name"] == customer_name
@@ -91,7 +94,12 @@ async def build_ar_invoice_request_data(
             before_sleep=before_sleep_log(ar_invoice_logger, logging.DEBUG),
         ):
             with attempt:
-                qbd_ref = db.collection(company_id).document("quickbooks-desktop-data")
+                qbd_ref = (
+                    db.collection(company_id)
+                    .document("quickbooks-desktop-data")
+                    .collection("items")
+                    .document("items")
+                )
                 work_description_ref = (
                     db.collection(company_id)
                     .document("projects")
@@ -124,7 +132,7 @@ async def build_ar_invoice_request_data(
                 qbd_doc = await qbd_ref.get()
                 if not qbd_doc.exists:
                     return None
-                items = qbd_doc.to_dict()["items"]["data"]
+                items = qbd_doc.to_dict()["data"]
 
                 work_description_doc = await work_description_ref.get()
                 if not work_description_doc.exists:
@@ -142,8 +150,9 @@ async def build_ar_invoice_request_data(
 
                 change_order_summary_doc = await change_order_summary_ref.get()
                 if not change_order_summary_doc.exists:
-                    return None
-                change_order_summary = change_order_summary_doc.to_dict()
+                    change_order_summary = None
+                else:
+                    change_order_summary = change_order_summary_doc.to_dict()
 
                 # arbirtray code codes for profit, liability and taxes
                 keys = ["0.1100", "0.1200", "0.1300", "0.1400"]
@@ -204,12 +213,21 @@ async def build_ar_invoice_request_data(
         db.close()
 
 
+def format_cost_code(cost_code, decimal_places=4):
+    try:
+        num = float(cost_code)
+        formatted_num = f"{num:.{decimal_places}f}"
+        return formatted_num
+    except ValueError:
+        return cost_code
+
+
 def build_ar_line_items(
     items: dict,
     work_description: dict,
     # client_bill_summary: dict,
     subtotals: Dict[str, Any],
-    change_order_summary: Dict[str, str | Dict[str, str]],
+    change_order_summary: Dict[str, str | Dict[str, str]] | None,
 ):
     # TODO fix this funky function, add better typing above
     labor = work_description["actuals"]["laborFee"]
@@ -224,9 +242,10 @@ def build_ar_line_items(
     labor_items = []
     for labor_fee in labor.values():
         for cost_code in labor_fee:
+            cost_code = format_cost_code(cost_code)
             if cost_code in item_dict:
                 item = item_dict[cost_code]
-                row_data = labor_fee[cost_code]
+                row_data = labor_fee[str(float(cost_code))]
                 if row_data["vendor"] == "HACHI Truck":
                     vendor = row_data["vendor"]
                 else:
@@ -262,9 +281,10 @@ def build_ar_line_items(
     invoice_items = []
     for invoice in invoices.values():
         for cost_code in invoice:
+            cost_code = format_cost_code(cost_code)
             if cost_code in item_dict:
                 item = item_dict[cost_code]
-                row_data = invoice[cost_code]
+                row_data = invoice[str(float(cost_code))]
                 invoice_items.append(
                     {
                         "item_id": item["id"],
@@ -287,7 +307,7 @@ def build_ar_line_items(
     )
     line_items.extend(sorted_invoice_items)
 
-    # add subtotal and an empty line
+    # TODO get the subtotal id from the user add subtotal and an empty line
     line_items.append(
         {
             "description": "Budgeted Items Subtotal",
@@ -351,9 +371,10 @@ def build_ar_line_items(
             change_order_items = []
             for invoice in change_order.values():
                 for cost_code in invoice:
+                    cost_code = format_cost_code(cost_code)
                     if cost_code in item_dict:
                         item = item_dict[cost_code]
-                        row_data = invoice[cost_code]
+                        row_data = invoice[str(float(cost_code))]
                         change_order_items.append(
                             {
                                 "item_id": item["id"],
@@ -384,8 +405,11 @@ def build_ar_line_items(
                 ):
                     continue
                 if cost_code in item_dict:
+                    cost_code = format_cost_code(cost_code)
                     item = item_dict[cost_code]
-                    row_data = subtotals["changeOrders"][change_order_id][cost_code]
+                    row_data = subtotals["changeOrders"][change_order_id][
+                        str(float(cost_code))
+                    ]
                     single_change_order_profit_taxes_items.append(
                         {
                             "item_id": item["id"],

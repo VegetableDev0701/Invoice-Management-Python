@@ -122,10 +122,10 @@ jobs:
             --update-secrets AGAVE_CLIENT_SECRET=$AGAVE_CLIENT_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest \
             --region us-central1 \
             --platform managed \
-            --memory 2Gi \
+            --memory 4Gi \
             --cpu 1 \
             --timeout 300s \
             --concurrency 80 \
             --min-instances 0 \
-            --max-instances 10 \
+            --max-instances 5 \
             --service-account cloud-run@${{vars.PROJECT_ID}}.iam.gserviceaccount.com

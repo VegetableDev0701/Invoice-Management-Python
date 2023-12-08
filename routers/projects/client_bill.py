@@ -160,8 +160,8 @@ async def build_ar_invoice(
 
     headers = {
         "API-Version": Config.AGAVE_API_VERSION,
-        "Client-Id": Config.AGAVE_CLIENT_ID,
         "accept": "application/json",
+        "Client-Id": Config.AGAVE_CLIENT_ID,
         "Client-Secret": Config.AGAVE_CLIENT_SECRET,
         "Account-Token": Config.AGAVE_ACCOUNT_TOKEN,
         "Content-Type": "application/json",

@@ -4,9 +4,9 @@ from pydantic import BaseModel, Extra
 
 # Update Project in Invoices
 class Project(BaseModel):
-    name: str
-    address: str
-    uuid: str
+    name: str | None
+    address: str | None
+    uuid: str | None
 
 
 class PredictedProject(BaseModel):
@@ -52,12 +52,17 @@ class LineItemObject(BaseModel):
     __root__: Dict[str, LineItems]
 
 
+class Vendor(BaseModel):
+    name: str
+    uuid: str | None
+
+
 class ProcessedInvoiceDataItem(BaseModel):
     is_credit: bool | None = None
     approver: str | None = None
     total_tax_amount: str | None = None
     line_items: Dict[str, LineItems] | None = None
-    vendor_name: str | None = None
+    vendor: Vendor
     change_order: ChangeOrderObject | None
     cost_code: str | None = None
     line_items_toggle: bool | None = None

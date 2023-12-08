@@ -35,6 +35,10 @@ class Config:
     AGAVE_API_VERSION = AGAVE_API_VERSION
     AGAVE_TOKEN_EXCHANGE_URL = AGAVE_TOKEN_EXCHANGE_URL
     AGAVE_LINK_CONNECTION_URL = AGAVE_LINK_CONNECTION_URL
+    GPT35_TURBO_LATEST = "gpt-3.5-turbo-1106"
+    GPT35_TURBO = "gpt-3.5-turbo"
+    GPT4_TURBO_LATEST_PREVIEW = "gpt-4-1106-preview"
+    GPT4_LATEST = "gpt-4"
 
     def __init__(self, company_id, project_id):
         self.company_id = company_id

@@ -13,24 +13,21 @@ from utils.database.projects import utils as project_utils
 from utils.data_models.projects import FullProjectDataToAdd
 from utils.data_models.charts import B2AReport, FullB2ADataV2
 from utils.database.firestore import (
-    get_all_project_details_data,
+    fetch_all_active_projects,
     push_to_firestore,
-    get_from_firestore,
-    stream_all_project_data,
     push_update_to_firestore,
     delete_collections_from_firestore,
     delete_summary_data_from_firestore,
+    stream_all_project_data,
     update_project_status,
 )
-
 
 router = APIRouter()
 
 
-@router.get("/{company_id}/projects-data")
-async def get_projects_data(
-    company_id: str,
-    current_user=Depends(auth.get_current_user)
+@router.get("/{company_id}/get-all-projects-data")
+async def get_all_active_projects_data(
+    company_id: str, current_user=Depends(auth.get_current_user)
 ) -> str:
     """
     Fetches all project details data for a given company.
@@ -48,64 +45,26 @@ async def get_projects_data(
     """
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
-    doc = await get_all_project_details_data(
-        project_name=PROJECT_NAME,
-        collection_name=company_id,
-        document_name="projects",
-        details_doc_name="project-details",
+    doc = await fetch_all_active_projects(
+        company_id=company_id, project_name=PROJECT_NAME
     )
 
     return json.dumps(doc)
 
 
-@router.get("/{company_id}/get-projects-summary")
-async def get_projects_summary(
-    company_id: str,
-    current_user=Depends(auth.get_current_user)
-) -> str:
-    """
-    Fetches the summary of projects for a given company.
-
-    This function checks the current user's authorization, then retrieves the projects summary
-    for the specified company. The results are returned as a JSON string.
-
-    Args:
-        company_id (str): The ID of the company for which the projects summary is to be retrieved.
-        current_user (dict, optional): The current user's details. Defaults to the user
-            returned by `auth.get_current_user()`.
-
-    Returns:
-        str: A JSON string containing the projects summary for the specified company.
-    """
-    auth.check_user_data(company_id=company_id, current_user=current_user)
-
-    projects_summary = await get_from_firestore(
-        project_name=PROJECT_NAME,
-        collection_name=company_id,
-        document_name="project-summary",
-    )
-
-    return json.dumps(projects_summary)
-
-
 @router.get("/{company_id}/get-all-project-data")
 async def get_all_project_data(
-    company_id: str,
-    project_id: str,
-    current_user=Depends(auth.get_current_user)
+    company_id: str, project_id: str, current_user=Depends(auth.get_current_user)
 ) -> str | None:
     """
     Fetches all data related to a specific project for a given company.
-
     This function checks the current user's authorization, then retrieves all data
     for the specified project and company. The results are returned as a JSON string.
-
     Args:
         company_id (str): The ID of the company for which the project data is to be retrieved.
         project_id (str): The ID of the project for which the data is to be retrieved.
         current_user (dict, optional): The current user's details. Defaults to the user
             returned by `auth.get_current_user()`.
-
     Returns:
         str: A JSON string containing all the project data for the specified company and project.
             If no data is found, returns None.
@@ -173,18 +132,19 @@ async def add_project(
         doc_collection_document="project-details",
     )
 
-    task2 = push_update_to_firestore(
+    task2 = push_to_firestore(
         project_name=PROJECT_NAME,
         collection=company_id,
-        data={full_data.uuid: new_summary_data.dict()},
-        document="project-summary",
-        sub_document_name="allProjects",
+        data=new_summary_data.dict(),
+        document="projects",
+        doc_collection=new_summary_data.uuid,
+        doc_collection_document="project-summary",
     )
 
-    await asyncio.gather(task1, task2)
+    _ = await asyncio.gather(task1, task2)
 
     return {
-        "message": "Successfully added new project.",
+        "message": "Succesfully added new project.",
     }
 
 
@@ -229,14 +189,17 @@ async def update_project(
     task2 = push_update_to_firestore(
         project_name=PROJECT_NAME,
         collection=company_id,
-        data={project_id: new_summary_data.dict()},
-        document="project-summary",
-        sub_document_name="allProjects",
+        data=new_summary_data.dict(),
+        document="projects",
+        doc_collection=project_id,
+        doc_collection_document="project-summary",
     )
 
-    await asyncio.gather(task1, task2)
+    _ = await asyncio.gather(task1, task2)
 
-    return {"message": "Successfully updated project."}
+    return {
+        "message": "Successfully added new project.",
+    }
 
 
 @router.patch("/{company_id}/change-project-status")
@@ -264,11 +227,16 @@ async def change_project_status(
     """
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
+    if change_status_to == "false":
+        isActive = False
+    else:
+        isActive = True
+
     # Update in the summary data
     await update_project_status(
         project_name=PROJECT_NAME,
         collection=company_id,
-        data={"isActive": change_status_to},
+        data={"isActive": isActive},
         item_ids=data,
     )
 
@@ -277,9 +245,7 @@ async def change_project_status(
 
 @router.delete("/{company_id}/delete-projects")
 async def delete_project(
-    company_id: str,
-    data: List[str],
-    current_user=Depends(auth.get_current_user)
+    company_id: str, data: List[str], current_user=Depends(auth.get_current_user)
 ) -> dict:
     """
     Deletes specific projects of a given company.
@@ -298,22 +264,12 @@ async def delete_project(
     """
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
-    task1 = delete_collections_from_firestore(
+    await delete_collections_from_firestore(
         project_name=PROJECT_NAME,
         company_id=company_id,
         data=data,
         document_name="projects",
     )
-
-    task2 = delete_summary_data_from_firestore(
-        project_name=PROJECT_NAME,
-        company_id=company_id,
-        data=data,
-        document_name="project-summary",
-        sub_document_name="allProjects",
-    )
-
-    await asyncio.gather(task1, task2)
 
     return {"message": "Successfully deleted project(s)."}
 
@@ -338,7 +294,6 @@ async def add_project_b2a_chart_data(
 
     return {"message": "Successfully updated B2A Chart Data."}
 
-
 @router.post("/{company_id}/build-b2a-report")
 async def build_b2a_report(
     company_id: str,
@@ -347,7 +302,7 @@ async def build_b2a_report(
     current_user=Depends(auth.get_current_user),
 ) -> dict :
     auth.check_user_data(company_id=company_id, current_user=current_user)
-    
+
     report_data = {
         'Service': [],
         'Budget': [],
@@ -358,7 +313,7 @@ async def build_b2a_report(
 
     for item in data.service:
         project_utils.convert_report_data_to_list(report_data, item)
-    
+
     project_utils.convert_report_data_to_list(report_data, data.serviceTotal)
 
     report_data["Service"].append('Other Charges')
@@ -369,7 +324,7 @@ async def build_b2a_report(
 
     for item in data.otherCharges:
         project_utils.convert_report_data_to_list(report_data, item)
-    
+
     project_utils.convert_report_data_to_list(report_data, data.otherChargesTotal)
     project_utils.convert_report_data_to_list(report_data, data.contractTotal)
 
@@ -388,7 +343,7 @@ async def build_b2a_report(
 
     for item in data.changeOrder:
         project_utils.convert_report_data_to_list(report_data, item)
-    
+
     project_utils.convert_report_data_to_list(report_data, data.changeOrderTotal)
 
     # add empty line

@@ -109,7 +109,7 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000)),
-        log_level="debug",
+        log_level="info",
         reload=True,
         access_log=False,
     )

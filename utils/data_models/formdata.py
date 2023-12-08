@@ -9,7 +9,7 @@ class SelectMenuOptions(BaseModel):
 
 class Items(BaseModel):
     label: str
-    value: str
+    value: str | None = None
     id: str
     type: str | None = None
     required: bool | None = None
