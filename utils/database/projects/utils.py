@@ -15,6 +15,7 @@ from tenacity import (
 
 from utils.data_models.projects import AddClientBillData
 from utils.data_models.budgets import UpdateCostCode
+from utils.data_models.charts import BaseReportDataItem
 from utils.database import db_utils
 from utils.database.firestore import stream_entire_collection
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
@@ -225,6 +226,12 @@ def get_data_by_recursive_level(full_data, level):
         level_data = level_data['subItems'][index]
     return level_data
 
+def convert_report_data_to_list(list: dict[str, list], data: BaseReportDataItem):
+    list["Service"].append(data.title)
+    list["Budget"].append(data.budgetAmount)
+    list["Actual Costs"].append(data.actualAmount)
+    list["Difference"].append(data.difference)
+    list["%"].append(data.percent)
 
 async def update_all_project_budgets(
     project_name: str, collection: str, document: str, data: list[UpdateCostCode]

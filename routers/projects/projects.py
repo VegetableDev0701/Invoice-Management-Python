@@ -1,14 +1,17 @@
 import asyncio
 import json
 from typing import List
+import pandas as pd
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from validation import io_validation
 from config import PROJECT_NAME
 from utils import auth
+from utils.database.projects import utils as project_utils
 from utils.data_models.projects import FullProjectDataToAdd
-from utils.data_models.charts import FullB2AData, FullB2ADataV2
+from utils.data_models.charts import B2AReport, FullB2ADataV2
 from utils.database.firestore import (
     get_all_project_details_data,
     push_to_firestore,
@@ -181,7 +184,7 @@ async def add_project(
     await asyncio.gather(task1, task2)
 
     return {
-        "message": "Succesfully added new project.",
+        "message": "Successfully added new project.",
     }
 
 
@@ -334,3 +337,73 @@ async def add_project_b2a_chart_data(
     )
 
     return {"message": "Successfully updated B2A Chart Data."}
+
+
+@router.post("/{company_id}/build-b2a-report")
+async def build_b2a_report(
+    company_id: str,
+    project_id: str,
+    data: B2AReport,
+    current_user=Depends(auth.get_current_user),
+) -> dict :
+    auth.check_user_data(company_id=company_id, current_user=current_user)
+    
+    report_data = {
+        'Service': [],
+        'Budget': [],
+        'Actual Costs': [],
+        'Difference': [],
+        '%': [],
+    }
+
+    for item in data.service:
+        project_utils.convert_report_data_to_list(report_data, item)
+    
+    project_utils.convert_report_data_to_list(report_data, data.serviceTotal)
+
+    report_data["Service"].append('Other Charges')
+    report_data["Budget"].append('')
+    report_data["Actual Costs"].append('')
+    report_data["Difference"].append('')
+    report_data["%"].append('')
+
+    for item in data.otherCharges:
+        project_utils.convert_report_data_to_list(report_data, item)
+    
+    project_utils.convert_report_data_to_list(report_data, data.otherChargesTotal)
+    project_utils.convert_report_data_to_list(report_data, data.contractTotal)
+
+    # add empty line
+    report_data["Service"].append('')
+    report_data["Budget"].append('')
+    report_data["Actual Costs"].append('')
+    report_data["Difference"].append('')
+    report_data["%"].append('')
+
+    report_data["Service"].append('CHANGE ORDERS:')
+    report_data["Budget"].append('')
+    report_data["Actual Costs"].append('')
+    report_data["Difference"].append('')
+    report_data["%"].append('')
+
+    for item in data.changeOrder:
+        project_utils.convert_report_data_to_list(report_data, item)
+    
+    project_utils.convert_report_data_to_list(report_data, data.changeOrderTotal)
+
+    # add empty line
+    report_data["Service"].append('')
+    report_data["Budget"].append('')
+    report_data["Actual Costs"].append('')
+    report_data["Difference"].append('')
+    report_data["%"].append('')
+
+    project_utils.convert_report_data_to_list(report_data, data.grandTotal)
+
+    df = pd.DataFrame(report_data)
+
+    unique_filename = f"{str(datetime.now()).replace(' ', '_').replace(':', '-').split('.')[0]}.xlsx"
+
+    df.to_excel(f"static/{unique_filename}", index=False)
+
+    return {"message": "Successfully built B2A Report.", "download_url": unique_filename}
