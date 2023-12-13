@@ -1,6 +1,7 @@
 from typing import Dict, List
 from pydantic import BaseModel
 
+from utils.data_models.base import NameWithId
 
 class SelectMenuOptions(BaseModel):
     id: int
@@ -47,11 +48,6 @@ class AccountSettings(BaseModel):
     mainCategories: List[MainCategories]
 
 
-class ChangeOrder(BaseModel):
-    uuid: str
-    name: str
-
-
 class LaborData(BaseModel):
     numCostCodes: int
     name: str | None = None
@@ -67,7 +63,7 @@ class LaborLineItemItem(BaseModel):
     cost_code: str
     work_description: str
     number_of_hours: str
-    change_order: ChangeOrder | None = None
+    change_order: NameWithId | None = None
     amount: str
 
 

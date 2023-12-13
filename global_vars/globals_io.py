@@ -26,3 +26,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/devstorage.read_only",
     "https://www.googleapis.com/auth/iam",
 ]
+
+AGAVE_VENDORS_URL = "https://api.agaveapi.com/vendors"
+AGAVE_PASSTHROUGH_URL = "https://api.agaveapi.com/passthrough"
+AGAVE_AR_INVOICES_URL = "https://api.agaveapi.com/ar-invoices"

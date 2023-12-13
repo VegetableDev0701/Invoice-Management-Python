@@ -1,6 +1,7 @@
 from typing import Dict, List
 from pydantic import BaseModel, Extra
 
+from utils.data_models.base import NameWithId
 
 # Update Project in Invoices
 class Project(BaseModel):
@@ -31,17 +32,12 @@ class BoundingBox(BaseModel):
     page: int | None = None
 
 
-class ChangeOrderObject(BaseModel):
-    name: str
-    uuid: str
-
-
 class LineItems(BaseModel):
     description: str | None = None
     amount: str | None = None
     cost_code: str | None = None
     work_description: str | None = None
-    change_order: ChangeOrderObject | None = None
+    change_order: NameWithId | None = None
     bounding_box: BoundingBox | None = None
     page: float | None = None
     number_of_hours: int | None = None
@@ -52,18 +48,13 @@ class LineItemObject(BaseModel):
     __root__: Dict[str, LineItems]
 
 
-class Vendor(BaseModel):
-    name: str
-    uuid: str | None
-
-
 class ProcessedInvoiceDataItem(BaseModel):
     is_credit: bool | None = None
     approver: str | None = None
     total_tax_amount: str | None = None
     line_items: Dict[str, LineItems] | None = None
-    vendor: Vendor
-    change_order: ChangeOrderObject | None
+    vendor: NameWithId
+    change_order: NameWithId | None
     cost_code: str | None = None
     line_items_toggle: bool | None = None
     total_amount: str | None = None
@@ -111,11 +102,6 @@ class Entity(BaseModel):
     confidence_score: int
 
 
-class ChangeOrder(BaseModel):
-    name: str
-    uuid: str
-
-
 class InvoiceLineItemItem(BaseModel):
     description: str | None = None
     amount: str
@@ -124,12 +110,12 @@ class InvoiceLineItemItem(BaseModel):
     page: int | None = None
     bounding_box: BoundingBox | None = None
     number_of_hours: int | None = None
-    change_order: ChangeOrder | None = None
+    change_order: NameWithId | None = None
 
 
 class ProcessedInvoiceData1(BaseModel):
     approver: str
-    change_order: ChangeOrder | None
+    change_order: NameWithId | None
     cost_code: str | None = None
     date_received: str
     invoice_id: str | None
@@ -138,7 +124,8 @@ class ProcessedInvoiceData1(BaseModel):
     line_items_toggle: bool
     total_amount: str
     total_tax_amount: str
-    vendor_name: str
+    vendor_name: str | None = None
+    vendor: NameWithId | None = None
     is_synced: str | None = None
 
 

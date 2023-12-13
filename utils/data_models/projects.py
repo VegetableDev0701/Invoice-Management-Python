@@ -9,7 +9,8 @@ from utils.data_models.budgets import (
     ChangeOrderActuals,
     ChangeOrderActualsV2,
 )
-from utils.data_models.invoices import ChangeOrderObject, Invoices
+from utils.data_models.invoices import Invoices
+from utils.data_models.base import NameWithId
 
 
 class AddProjectData(BaseModel):
@@ -58,7 +59,7 @@ class LaborLineItemItem(BaseModel):
     cost_code: str
     number_of_hours: str
     work_description: str
-    change_order: ChangeOrderObject | None
+    change_order: NameWithId | None
     amount: str
 
 

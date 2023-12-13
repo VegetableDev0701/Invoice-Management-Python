@@ -16,7 +16,8 @@ class AddVendordata(BaseModel):
 
 
 class SummaryVendorData(BaseModel):
-    vendorName: str | None = None
+    vendorName: str
+    uuid: str
     email: str | None = None
     address: str | None = None
     city: str | None = None
@@ -28,10 +29,18 @@ class SummaryVendorData(BaseModel):
     insuranceExpirationDate: str | None = None
     landiLicNumber: str | None = None
     landiExpirationDate: str | None = None
-
-    class Config:
-        extra = Extra.allow
-        validate_assignment = True
+    w9OnFile: bool | None
+    cellPhone: str | None = None
+    zipCode: str | None = None
+    vendorType: str | None = None
+    primaryContact: str | None = None
+    insuranceCoverageAmt: str | None = None
+    bondCompanyName: str | None = None
+    bondAmt: str | None = None
+    workPhone: str | None = None
+    workersCompExpirationDate: str | None = None
+    taxNumber: str | None = None
+    agave_uuid: str | None = None
 
 
 class FullVendorDataToAdd(BaseModel):

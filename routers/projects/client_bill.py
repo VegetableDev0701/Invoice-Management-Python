@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from pydantic import BaseModel
 
 from config import PROJECT_NAME, Config
+from global_vars.globals_io import AGAVE_AR_INVOICES_URL
 from utils import auth
 from utils.database.firestore import (
     push_update_to_firestore,
@@ -185,7 +186,7 @@ async def build_ar_invoice(
     }
 
     response = requests.post(
-        url="https://api.agaveapi.com/ar-invoices",
+        url=AGAVE_AR_INVOICES_URL,
         headers=headers,
         data=json.dumps(ar_invoice_data),
     )

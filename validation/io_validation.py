@@ -76,39 +76,86 @@ async def check_for_duplicates_by_hash(
         db.close()
 
 
-def validate_phone_number(phone_number: str) -> bool:
+def validate_phone_number(phone_number: str, required: str | None) -> bool:
     """
     Check for a valid 10 digit phone number.
     """
     valid_phone_regex = r"^\d{10}$"
-    if re.match(valid_phone_regex, phone_number):
-        return True
+    if required:
+        if re.match(valid_phone_regex, phone_number):
+            return True
+        else:
+            return False
     else:
-        return False
+        if phone_number == "" or phone_number is None:
+            return True
+        else:
+            if re.match(valid_phone_regex, phone_number):
+                return True
+            else:
+                return False
 
 
-def validate_url(url: str) -> bool:
+def validate_url(url: str, required: str | None) -> bool:
     """
     Validates URLs
     """
     valid_url_regex = (
         r"^((https?|ftp|smtp):\/\/)?(www.)?[a-z0-9]+\.[a-z]+(\/[a-zA-Z0-9#]+\/?)*$"
     )
-    if re.match(valid_url_regex, url):
-        return True
+    if required:
+        if re.match(valid_url_regex, url):
+            return True
+        else:
+            return False
     else:
-        return False
+        if url == "" or url is None:
+            return True
+        else:
+            if re.match(valid_url_regex, url):
+                return True
+            else:
+                return False
 
 
-def validate_email(email: str) -> bool:
+def validate_email(email: str, required: str | None) -> bool:
     """
     Validates emails.
     """
     valid_email_regex = r'^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$'
-    if re.match(valid_email_regex, email.lower()):
-        return True
+    if required:
+        if re.match(valid_email_regex, email.lower()):
+            return True
+        else:
+            return False
     else:
-        return False
+        if email == "" or email is None:
+            return True
+        else:
+            if re.match(valid_email_regex, email.lower()):
+                return True
+            else:
+                return False
+
+
+def validate_tax_number(tax_number: str, required: str | None) -> bool:
+    """
+    Validates the tax number (EIN) to be ##-####### form.
+    """
+    valid_tax_number_regex = r"^\d{2}-\d{7}$"
+    if required:
+        if re.match(valid_tax_number_regex, tax_number):
+            return True
+        else:
+            return False
+    else:
+        if tax_number == "" or tax_number is None:
+            return True
+        else:
+            if re.match(valid_tax_number_regex, tax_number):
+                return True
+            else:
+                return False
 
 
 def traverse_data_model(data):
@@ -125,8 +172,16 @@ def traverse_data_model(data):
                         continue
                     for item in items.items:
                         if item.validFunc == "email":
-                            validate_fields[item.id] = validate_email(item.value)
+                            validate_fields[item.id] = validate_email(
+                                item.value, item.required
+                            )
                         if item.validFunc == "phone":
-                            validate_fields[item.id] = validate_phone_number(item.value)
+                            validate_fields[item.id] = validate_phone_number(
+                                item.value, item.required
+                            )
+                        if item.validFunc == "tax-number":
+                            validate_fields[item.id] = validate_tax_number(
+                                item.value, item.required
+                            )
 
     return validate_fields

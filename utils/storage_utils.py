@@ -256,7 +256,6 @@ async def download_and_onboard_new_company_files(company_id: str) -> None:
 
     # Load all the base form data for the new company
     for blob in [x for x in base_form_blobs if re.search(r"json$", x.name)]:
-
         temp_dir = tempfile.mkdtemp()  # Create a temporary directory
         temp_file_path = pathlib.Path(temp_dir) / "temp.json"
 

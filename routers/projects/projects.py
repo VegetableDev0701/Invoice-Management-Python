@@ -30,7 +30,7 @@ async def get_all_active_projects_data(
     company_id: str, current_user=Depends(auth.get_current_user)
 ) -> str:
     """
-    Fetches all project details data for a given company.
+    Fetches all project details data for all companies.
 
     This function checks the current user's authorization, then retrieves all project
     details for the specified company. The results are returned as a JSON string.
@@ -294,21 +294,22 @@ async def add_project_b2a_chart_data(
 
     return {"message": "Successfully updated B2A Chart Data."}
 
+
 @router.post("/{company_id}/build-b2a-report")
 async def build_b2a_report(
     company_id: str,
     project_id: str,
     data: B2AReport,
     current_user=Depends(auth.get_current_user),
-) -> dict :
+) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
     report_data = {
-        'Service': [],
-        'Budget': [],
-        'Actual Costs': [],
-        'Difference': [],
-        '%': [],
+        "Service": [],
+        "Budget": [],
+        "Actual Costs": [],
+        "Difference": [],
+        "%": [],
     }
 
     for item in data.service:
@@ -316,11 +317,11 @@ async def build_b2a_report(
 
     project_utils.convert_report_data_to_list(report_data, data.serviceTotal)
 
-    report_data["Service"].append('Other Charges')
-    report_data["Budget"].append('')
-    report_data["Actual Costs"].append('')
-    report_data["Difference"].append('')
-    report_data["%"].append('')
+    report_data["Service"].append("Other Charges")
+    report_data["Budget"].append("")
+    report_data["Actual Costs"].append("")
+    report_data["Difference"].append("")
+    report_data["%"].append("")
 
     for item in data.otherCharges:
         project_utils.convert_report_data_to_list(report_data, item)
@@ -329,17 +330,17 @@ async def build_b2a_report(
     project_utils.convert_report_data_to_list(report_data, data.contractTotal)
 
     # add empty line
-    report_data["Service"].append('')
-    report_data["Budget"].append('')
-    report_data["Actual Costs"].append('')
-    report_data["Difference"].append('')
-    report_data["%"].append('')
+    report_data["Service"].append("")
+    report_data["Budget"].append("")
+    report_data["Actual Costs"].append("")
+    report_data["Difference"].append("")
+    report_data["%"].append("")
 
-    report_data["Service"].append('CHANGE ORDERS:')
-    report_data["Budget"].append('')
-    report_data["Actual Costs"].append('')
-    report_data["Difference"].append('')
-    report_data["%"].append('')
+    report_data["Service"].append("CHANGE ORDERS:")
+    report_data["Budget"].append("")
+    report_data["Actual Costs"].append("")
+    report_data["Difference"].append("")
+    report_data["%"].append("")
 
     for item in data.changeOrder:
         project_utils.convert_report_data_to_list(report_data, item)
@@ -347,18 +348,23 @@ async def build_b2a_report(
     project_utils.convert_report_data_to_list(report_data, data.changeOrderTotal)
 
     # add empty line
-    report_data["Service"].append('')
-    report_data["Budget"].append('')
-    report_data["Actual Costs"].append('')
-    report_data["Difference"].append('')
-    report_data["%"].append('')
+    report_data["Service"].append("")
+    report_data["Budget"].append("")
+    report_data["Actual Costs"].append("")
+    report_data["Difference"].append("")
+    report_data["%"].append("")
 
     project_utils.convert_report_data_to_list(report_data, data.grandTotal)
 
     df = pd.DataFrame(report_data)
 
-    unique_filename = f"{str(datetime.now()).replace(' ', '_').replace(':', '-').split('.')[0]}.xlsx"
+    unique_filename = (
+        f"{str(datetime.now()).replace(' ', '_').replace(':', '-').split('.')[0]}.xlsx"
+    )
 
     df.to_excel(f"static/{unique_filename}", index=False)
 
-    return {"message": "Successfully built B2A Report.", "download_url": unique_filename}
+    return {
+        "message": "Successfully built B2A Report.",
+        "download_url": unique_filename,
+    }
