@@ -80,8 +80,9 @@ jobs:
 
       - name: Set variable names based on environment
         run: |
-          echo "AGAVE_CLIENT_SECRET=${NODE}_AGAVE_CLIENT_SECRET" >> $GITHUB_ENV
           echo "CLOUD_RUN_DEPLOY_NODE_ENV=${ENV}-stak-backend" >> $GITHUB_ENV
+          echo "AGAVE_CLIENT_SECRET=${NODE}_AGAVE_CLIENT_SECRET" >> $GITHUB_ENV
+          echo "OPENAI_API_KEY=${NODE}_OPENAI_API_KEY" >> $GITHUB_ENV
           echo "AGAVE_CLIENT_ID=${{ vars[format('{0}_AGAVE_CLIENT_ID', env.NODE)] }}" >> $GITHUB_ENV
           echo "AUTH0_ISSUER=${{ vars[format('{0}_AUTH0_ISSUER', env.NODE)] }}" >> $GITHUB_ENV
           echo "AUTH0_DOMAIN=${{ vars[format('{0}_AUTH0_DOMAIN', env.NODE)] }}" >> $GITHUB_ENV
@@ -119,7 +120,7 @@ jobs:
           gcloud run deploy $CLOUD_RUN_DEPLOY_NODE_ENV \
             --set-env-vars ENV=$ENV,GOOGLE_CLOUD_PROJECT=${{vars.GOOGLE_CLOUD_PROJECT}},AUTH0_DOMAIN=$AUTH0_DOMAIN,AUTH0_API_AUDIENCE=$AUTH0_API_AUDIENCE,AUTH0_ALGORITHMS=${{vars.AUTH0_ALGORITHMS}},AUTH0_ISSUER=$AUTH0_ISSUER,TZ=${{vars.TIMEZONE}},AGAVE_CLIENT_ID=$AGAVE_CLIENT_ID,AGAVE_TOKEN_EXCHANGE_URL=${{vars.AGAVE_TOKEN_EXCHANGE_URL}},AGAVE_API_VERSION=${{vars.AGAVE_API_VERSION}},AGAVE_LINK_CONNECTION_URL=${{vars.AGAVE_LINK_CONNECTION_URL}} \
             --image ${{vars.US_MULTI_REGION}}-docker.pkg.dev/${{vars.PROJECT_ID}}/${{vars.ARTIFACT_REPOSITORY_NAME}}/$CLOUD_RUN_DEPLOY_NODE_ENV:$TAG \
-            --update-secrets AGAVE_CLIENT_SECRET=$AGAVE_CLIENT_SECRET:latest,OPENAI_API_KEY=OPENAI_API_KEY:latest \
+            --update-secrets AGAVE_CLIENT_SECRET=$AGAVE_CLIENT_SECRET:latest,OPENAI_API_KEY=$OPENAI_API_KEY:latest \
             --region us-central1 \
             --platform managed \
             --memory 4Gi \

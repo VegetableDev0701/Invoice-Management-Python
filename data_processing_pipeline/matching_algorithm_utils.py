@@ -538,20 +538,29 @@ async def match_predicted_vendor(
                 "uuid": vendor.get("uuid"),
             }
             for vendor in all_vendors_dict
+            if vendor
         ]
 
-        # init model with all vendor names
-        model, vendors_emb = init_sentence_similarity_model(
-            [x["name"] for x in vendor_name_list]
-        )
-
-        # check if this is an invoice or contract
-        if pred_vendor_name_dict.get("supplier_name"):
-            vendor_name = pred_vendor_name_dict["supplier_name"]
-            is_invoice = True
-        elif pred_vendor_name_dict.get("vendor"):
-            vendor_name = pred_vendor_name_dict["vendor"]
-            is_invoice = False
+        if vendor_name_list:
+            # init model with all vendor names
+            model, vendors_emb = init_sentence_similarity_model(
+                [x["name"] for x in vendor_name_list]
+            )
+            # check if this is an invoice or contract
+            if pred_vendor_name_dict.get("supplier_name"):
+                vendor_name = pred_vendor_name_dict["supplier_name"]
+                is_invoice = True
+            elif pred_vendor_name_dict.get("vendor"):
+                vendor_name = pred_vendor_name_dict["vendor"]
+                is_invoice = False
+            else:
+                pred_vendor_name_dict.update(
+                    {
+                        "agave_uuid": None,
+                        "vendor_match_conf_score": None,
+                    }
+                )
+                return pred_vendor_name_dict
         else:
             pred_vendor_name_dict.update(
                 {
