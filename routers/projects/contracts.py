@@ -19,6 +19,7 @@ from fastapi import (
 
 from utils.database.firestore import push_update_to_firestore
 
+from utils.data_models.projects import ContractEntry
 from utils.contract_helpers import delete_contracts_wrapper
 from config import Config, PROJECT_NAME, CUSTOMER_DOCUMENT_BUCKET
 from utils import io_utils, storage_utils, auth, contract_helpers
@@ -255,3 +256,25 @@ async def delete_invoices(
     )
 
     return {"message": f"{len(data)} contracts set for deletion."}
+
+
+@router.post("/{company_id}/edit-contract")
+async def edit_contract(
+    company_id: str,
+    project_id: str,
+    contract_id: str,
+    data: ContractEntry,
+    current_user=Depends(auth.get_current_user),
+) -> Dict[str, str]:
+    auth.check_user_data(company_id=company_id, current_user=current_user)
+
+    await push_update_to_firestore(
+        project_name=PROJECT_NAME,
+        collection=company_id,
+        data={contract_id: data.dict()},
+        document="projects",
+        doc_collection=project_id,
+        doc_collection_document="contracts",
+    )
+
+    return {"message": "Successfully updated the contract"}

@@ -166,3 +166,21 @@ class UpdateClientBillData(BaseModel):
     clientBillObj: ClientBillDataV2 | None
     labor: Labor | None
     laborSummary: List[LaborSummaryItem] | None
+
+
+class ContractSummaryData(BaseModel):
+    uuid: str
+    projectName: str
+    date: str
+    contractAmt: str
+    workDescription: str
+    vendor: str
+    vendor_match_conf_score: int | None = None
+    agave_uuid: str | None = None
+
+
+class ContractEntry(BaseModel):
+    gcs_img_uri: List[str]
+    gcs_uri: str
+    summaryData: ContractSummaryData
+    uuid: str
