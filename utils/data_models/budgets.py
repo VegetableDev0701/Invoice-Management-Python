@@ -5,7 +5,7 @@ from pydantic import BaseModel
 # Cost Codes
 class SubItems(BaseModel):
     name: str
-    number: float
+    number: str
     id: str
     inputType: str
     isCurrency: bool
@@ -17,7 +17,7 @@ class SubItems(BaseModel):
 
 class Divisions(BaseModel):
     name: str
-    number: float
+    number: str
     subItems: List[SubItems]
 
 
@@ -75,7 +75,7 @@ class UpdateBudgets(BaseModel):
 
 class UpdateCostCode(BaseModel):
     type: str
-    number: float = None
+    number: str = None
     name: str = None
     recursiveLevel: List[int] = None
 

@@ -197,7 +197,7 @@ async def get_labor_row_ids_by_labor_id(
 def create_new_cost_code_budget_item(number: str, name: str) -> dict:
     try:
         return {
-            "number": float(number),
+            "number": number,
             "value": "",
             "label": name,
             "isCurrency": True,
@@ -213,11 +213,11 @@ def create_new_cost_code_budget_item(number: str, name: str) -> dict:
 
 
 def create_new_subdivision_budget_item(number: str, name: str) -> dict:
-    return {"number": float(number), "items": [], "name": name}
+    return {"number": number, "items": [], "name": name}
 
 
 def create_new_division_budget_item(number: str, name: str) -> dict:
-    return {"number": float(number), "subdivisions": [], "name": name}
+    return {"number": number, "subdivisions": [], "name": name}
 
 
 def get_data_by_recursive_level(full_data, level):
@@ -240,6 +240,8 @@ def convert_report_data_to_list(list: dict[str, list], data: BaseReportDataItem)
     list["Difference"].append(data.difference)
     list["%"].append(data.percent)
 
+def custom_sort(item):
+    return int(str(item["number"]).split('.')[1])
 
 async def update_all_project_budgets(
     project_name: str, collection: str, document: str, data: list[UpdateCostCode]
@@ -285,7 +287,7 @@ async def update_all_project_budgets(
                         if len(action.recursiveLevel) == 0:
                             new_division_item = {
                                 "name": action.name,
-                                "number": float(action.number),
+                                "number": action.number,
                                 "subItems": [],
                             }
                             budget["divisions"].append(new_division_item)
@@ -298,7 +300,7 @@ async def update_all_project_budgets(
                                 budget["divisions"], action.recursiveLevel
                             )
                             new_cost_code = {
-                                "number": float(action.number),
+                                "number": action.number,
                                 "name": action.name,
                                 "value": "0.00",
                                 "id": str(action.number),
@@ -317,8 +319,11 @@ async def update_all_project_budgets(
                                 parent_item["subItems"] = []
                             parent_item["subItems"].append(new_cost_code)
                             sorted_item = sorted(
-                                parent_item["subItems"], key=lambda x: x["number"]
+                                parent_item["subItems"], key=custom_sort
                             )
+                            # sorted_item = sorted(
+                            #     parent_item["subItems"], key=lambda x: x["number"]
+                            # )
                             parent_item["subItems"] = sorted_item
                     elif action.type == "Delete":
                         if len(action.recursiveLevel) == 0:
@@ -346,7 +351,7 @@ async def update_all_project_budgets(
                             budget["divisions"], action.recursiveLevel
                         )
                         item["name"] = action.name
-                        item["number"] = float(action.number)
+                        item["number"] = action.number
                 except IndexError as error:
                     logger_project_utils.error(
                         f"An indexerror occured when trying to update all project budgets: {error}; The action is: {action}"
