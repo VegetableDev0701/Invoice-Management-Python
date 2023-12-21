@@ -72,7 +72,7 @@ class SummaryLaborData(BaseModel):
     rate: str
     line_items: LaborLineItems
     totalAmt: str
-    payPeriod: str
+    payPeriod: str | None
     currentLabor: bool
     clientBillId: str | None = None
     uuid: str | None = None
@@ -168,15 +168,23 @@ class UpdateClientBillData(BaseModel):
     laborSummary: List[LaborSummaryItem] | None
 
 
+class ContractVendorObject(BaseModel):
+    agave_uuid: str | None
+    name: str | None
+    uuid: str | None
+    vendor_match_conf_score: float | None
+
+
 class ContractSummaryData(BaseModel):
-    uuid: str
     projectName: str
     date: str
     contractAmt: str
     workDescription: str
-    vendor: str
-    vendor_match_conf_score: int | None = None
-    agave_uuid: str | None = None
+    vendor: ContractVendorObject
+    # uuid: str
+    # vendor: str
+    # vendor_match_conf_score: int | None = None
+    # agave_uuid: str | None = None
 
 
 class ContractEntry(BaseModel):

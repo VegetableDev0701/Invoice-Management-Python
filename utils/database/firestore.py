@@ -43,6 +43,8 @@ async def get_from_firestore(
     document_name: str,
     doc_collection: str | None = None,
     doc_collection_document: str | None = None,
+    doc_collection_doc_collection: str | None = None,
+    doc_collection_doc_collection_document: str | None = None,
 ):
     db = firestore.AsyncClient(project=project_name)
     try:
@@ -56,9 +58,20 @@ async def get_from_firestore(
             with attempt:
                 document_ref = db.collection(collection_name).document(document_name)
                 if doc_collection and doc_collection_document:
-                    document_ref = document_ref.collection(doc_collection).document(
-                        doc_collection_document
-                    )
+                    if (
+                        doc_collection_doc_collection
+                        and doc_collection_doc_collection_document
+                    ):
+                        document_ref = (
+                            document_ref.collection(doc_collection)
+                            .document(doc_collection_document)
+                            .collection(doc_collection_doc_collection)
+                            .document(doc_collection_doc_collection_document)
+                        )
+                    else:
+                        document_ref = document_ref.collection(doc_collection).document(
+                            doc_collection_document
+                        )
                     doc = await document_ref.get()
                     return doc.to_dict()
                 else:
@@ -377,7 +390,6 @@ async def push_to_firestore(
     db = firestore.AsyncClient(project=project_name)
     try:
         document_ref = db.collection(collection).document(document)
-
         if doc_collection and doc_collection_document:
             document_ref = document_ref.collection(doc_collection).document(
                 doc_collection_document
@@ -398,6 +410,61 @@ async def push_to_firestore(
     except Exception as e:
         firestore_io_logger.exception(
             f"An error occurred pushing data to firestore: {e}"
+        )
+    finally:
+        db.close()
+
+
+async def push_qbd_items_data_to_firestore(
+    project_name: str, collection: str, document: str, items_data: dict
+):
+    db = firestore.AsyncClient(project=project_name)
+    try:
+        tasks = []
+        ref = (
+            db.collection(collection)
+            .document(document)
+            .collection("items")
+            .document("items")
+        )
+        for url, status, data in items_data:
+            if status != 200:
+                continue
+            typ = url.split("type=")[-1]
+            type_ref = ref.collection(typ)
+            for item in data["data"]:
+                doc_ref = type_ref.document(item["id"])
+                tasks.append(asyncio.create_task(doc_ref.set(item)))
+        _ = await asyncio.gather(*tasks)
+
+    except Exception as e:
+        firestore_io_logger.exception(
+            f"An error occurred saving QBD items to Firestore: {e}"
+        )
+    finally:
+        db.close()
+
+
+async def push_qbd_data_to_firestore(
+    project_name: str,
+    collection: str,
+    document: str,
+    doc_collection: str,
+    data: dict,
+):
+    db = firestore.AsyncClient(project=project_name)
+
+    try:
+        tasks = []
+        ref = db.collection(collection).document(document).collection(doc_collection)
+        for item in data["data"]:
+            doc_ref = ref.document(item["id"])
+            tasks.append(asyncio.create_task(doc_ref.set(item)))
+        _ = await asyncio.gather(*tasks)
+
+    except Exception as e:
+        firestore_io_logger.exception(
+            f"An error occurred saving QBD items to Firestore: {e}"
         )
     finally:
         db.close()

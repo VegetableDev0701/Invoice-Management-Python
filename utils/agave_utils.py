@@ -1,31 +1,43 @@
+import asyncio
 import json
+import os
+
+import traceback
 from typing import Dict, Tuple
+import aiohttp
 
 from fastapi import HTTPException
 import requests
-from global_vars.globals_io import AGAVE_PASSTHROUGH_URL, AGAVE_VENDORS_URL
+from global_vars.globals_io import (
+    AGAVE_PASSTHROUGH_URL,
+    AGAVE_VENDORS_URL,
+    QBD_ITEM_TYPES,
+)
 from global_vars.globals_vendors import QBD_CUSTOM_FIELDS_LOOKUP
 from utils.data_models.vendors import SummaryVendorData
 from utils.database.firestore import get_from_firestore, push_to_firestore
 from utils.io_utils import (
     access_secret_version,
-    request_async,
+    request_async_delete,
+    request_async_get,
+    request_async_post,
     run_async_coroutine,
 )
 
 from config import PROJECT_NAME, Config
 
 
-def get_headers():
+def get_headers(account_token: str | None = None):
     headers = {
         "API-Version": Config.AGAVE_API_VERSION,
         "accept": "application/json",
         "Client-Id": Config.AGAVE_CLIENT_ID,
         "Client-Secret": Config.AGAVE_CLIENT_SECRET,
-        "Account-Token": Config.AGAVE_ACCOUNT_TOKEN,
+        "Account-Token": f"{account_token if account_token else Config.AGAVE_ACCOUNT_TOKEN}",
         "Content-Type": "application/json",
         "Include-Source-Data": "true",
     }
+
     return headers
 
 
@@ -172,7 +184,7 @@ async def add_custom_fields(
                 """
             )
     _ = await run_async_coroutine(
-        request_async(
+        request_async_post(
             url=AGAVE_PASSTHROUGH_URL, payloads=full_xml_parts, headers=get_headers()
         )
     )
@@ -263,3 +275,94 @@ async def handle_qbd_response(
     return {
         "message": "Successfully added new vendor to Stak, but there was a problem adding to Quickbooks."
     }
+
+
+async def get_agave_uuid_from_vendor_id(
+    vendor_ids: [str],
+    project_name: str,
+    company_id: str,
+    document_name: str,
+):
+    """
+    Function to traverse the vendor collection and delete the vendor from QBD via agave API.
+    """
+
+    tasks = [
+        get_from_firestore(
+            project_name=project_name,
+            collection_name=company_id,
+            document_name=document_name,
+            doc_collection=vendor_id,
+            doc_collection_document="vendor-summary",
+        )
+        for vendor_id in vendor_ids
+    ]
+
+    agave_uuids = [vendor["agave_uuid"] for vendor in await asyncio.gather(*tasks)]
+
+    return agave_uuids
+
+
+async def delete_vendors_from_qbd(agave_uuids: [str], vendor_ids: [str]):
+    try:
+        result = await run_async_coroutine(
+            request_async_delete(
+                url=AGAVE_VENDORS_URL, ids=agave_uuids, headers=get_headers()
+            )
+        )
+    except aiohttp.client_exceptions.ServerDisconnectedError as e:
+        print(traceback.print_exc)
+        return {
+            "message_agave_error": "The server disconnected. You may not have Quickbooks running and the Web Connector turned on. Please refresh your browser and try and delete these Vendors again."
+        }
+    except Exception as e:
+        print(e)
+        print(traceback.print_exc)
+        return {
+            "message_agave_error": f"Error: {e}. You may not have Quickbooks running and the Web Connector turned on. Please refresh your browser and try and delete these Vendors again."
+        }
+
+    # handle the response
+    if all([res == 200 for res in result]):
+        return {"message_agave_success": "All vendors deleted from QBD."}
+    elif all([res != 200 for res in result]):
+        return {
+            "message_agave_offline": "Stak is having trouble connecting to QBD, it may be offline."
+        }
+    else:
+        uuid_with_error = [
+            uuid for (res, uuid) in zip(result, vendor_ids) if res != 200
+        ]
+        return {
+            "message_agave_some": f"The following vendors were not deleted from QBD: {uuid_with_error}"
+        }
+
+
+async def ingest_qbd_items(account_token: str | None = None):
+    """
+    Ingest QBD items. Items require a type query to collect different item types.
+    """
+
+    urls = ["https://api.agaveapi.com/items" + f"?type={typ}" for typ in QBD_ITEM_TYPES]
+
+    result = await run_async_coroutine(
+        request_async_get(urls=urls, headers=get_headers(account_token=account_token))
+    )
+    return result
+
+
+async def ingest_qbd_data(url: str, account_token: str | None = None):
+    """
+    Ingest QBD data that doesn't require special type queries. This includes:
+        * employees
+        * customers
+        * vendors
+    """
+    try:
+        response = requests.get(url, headers=get_headers(account_token))
+        data = json.loads(response.text)
+        return data
+    except Exception as e:
+        print(e)
+        print(traceback.print_exc)
+        raise

@@ -27,6 +27,26 @@ SCOPES = [
     "https://www.googleapis.com/auth/iam",
 ]
 
-AGAVE_VENDORS_URL = "https://api.agaveapi.com/vendors"
-AGAVE_PASSTHROUGH_URL = "https://api.agaveapi.com/passthrough"
-AGAVE_AR_INVOICES_URL = "https://api.agaveapi.com/ar-invoices"
+BASE_URL = "https://api.agaveapi.com/"
+AGAVE_EMPLOYEES_URL = BASE_URL + "employees"
+AGAVE_VENDORS_URL = BASE_URL + "vendors"
+AGAVE_CUSTOMERS_URL = BASE_URL + "customers"
+AGAVE_AP_INVOICES_URL = BASE_URL + "ap-invoices"
+AGAVE_AR_INVOICES_URL = BASE_URL + "ar-invoices"
+AGAVE_PASSTHROUGH_URL = BASE_URL + "passthrough"
+AGAVE_ITEMS_URL = BASE_URL + "items"
+
+QBD_ITEM_TYPES = [
+    "Service",
+    "NonInventory",
+    "OtherCharge",
+    "Inventory",
+    "InventoryAssembly",
+    "FixedAsset",
+    "Subtotal",
+    "Discount",
+    "Payment",
+    "SalesTax",
+    "SalesTaxGroup",
+    "ItemGroup",
+]

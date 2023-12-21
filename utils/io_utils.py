@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import json
-from typing import Dict, List
+from typing import Any, Dict, List
 import uuid
 import hashlib
 import os
@@ -152,30 +152,59 @@ async def create_secret_id(company_id: str) -> str:
     return f"AGAVE_{company_id.upper()}_QBD_{ein}_ACCOUNT_TOKEN"
 
 
-async def fetch(session, url, payload, headers):
+async def fetch_post(session, url, payload, headers):
     async with session.post(url, data=payload.encode(), headers=headers) as response:
         return response.status
 
 
-async def request_async(url, payloads, headers):
+async def fetch_delete(session, url, headers):
+    async with session.delete(url, headers=headers) as response:
+        return response.status
+
+
+async def request_async_post(url: str, payloads: list[Any], headers: dict) -> list:
     async with aiohttp.ClientSession() as session:
-        tasks = [fetch(session, url, payload, headers) for payload in payloads]
+        tasks = [fetch_post(session, url, payload, headers) for payload in payloads]
+        return await asyncio.gather(*tasks)
+
+
+async def request_async_delete(url: str, ids: [str], headers: dict) -> list:
+    async with aiohttp.ClientSession() as session:
+        tasks = [
+            fetch_delete(session, url=f"{url}/{id}", headers=headers) for id in ids
+        ]
+        return await asyncio.gather(*tasks)
+
+
+async def fetch_get(session, url, headers):
+    async with session.get(url, headers=headers) as response:
+        if response.status == 200:
+            data = json.loads(await response.text())
+            return url, response.status, data
+        else:
+            return url, response.status, None
+
+
+async def request_async_get(urls: list[str], headers: dict) -> list:
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_get(session, url=url, headers=headers) for url in urls]
         return await asyncio.gather(*tasks)
 
 
 async def run_async_coroutine(coroutine):
     try:
         loop = asyncio.get_running_loop()
-    except RuntimeError:  # No running event loop
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        result = await loop.run_until_complete(coroutine)
-        loop.close()
-        return result
-    else:
         if loop.is_running():
             # Running in an environment like Jupyter
             return await asyncio.ensure_future(coroutine)
         else:
-            # Running in a standalone environment
+            # Running in a standalone environment but loop is not running
             return await loop.run_until_complete(coroutine)
+
+    except RuntimeError:  # No running event loop
+        # Running in a standalone environment without an event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(coroutine)
+        loop.close()
+        return result

@@ -401,7 +401,7 @@ async def listen_to_firestore_delete_client_bill(
                 )
             else:
                 await websocket.send_json(
-                    {"event": "dont_processing", "data": "End of stream"}
+                    {"event": "done_processing", "data": "End of stream"}
                 )
                 break
 

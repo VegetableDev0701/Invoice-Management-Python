@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from utils.data_models.base import NameWithId
 
+
 class SelectMenuOptions(BaseModel):
     id: int
     label: str
@@ -72,7 +73,7 @@ class LaborSummaryItem(BaseModel):
     name: str
     rate: str
     line_items: Dict[str, LaborLineItemItem]
-    payPeriod: str
+    payPeriod: str | None
     totalAmt: str
     clientBillId: str | None = None
     currentLabor: bool

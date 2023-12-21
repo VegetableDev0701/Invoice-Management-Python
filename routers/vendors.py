@@ -5,7 +5,9 @@ from typing import Dict, List
 from fastapi import APIRouter, Depends, HTTPException
 from utils.agave_utils import (
     add_vendors_to_qbd,
+    delete_vendors_from_qbd,
     find_unique_entries,
+    get_agave_uuid_from_vendor_id,
     get_all_vendors_from_agave,
     handle_qbd_response,
 )
@@ -202,6 +204,15 @@ async def delete_vendor(
 ):
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
+    agave_uuids = await get_agave_uuid_from_vendor_id(
+        vendor_ids=data,
+        project_name=PROJECT_NAME,
+        company_id=company_id,
+        document_name="vendors",
+    )
+
+    response_agave = await delete_vendors_from_qbd(agave_uuids, vendor_ids=data)
+
     await delete_collections_from_firestore(
         project_name=PROJECT_NAME,
         company_id=company_id,
@@ -209,11 +220,12 @@ async def delete_vendor(
         document_name="vendors",
     )
 
-    # TODO add remove vendor from QBD action
-    # If not successfull, then show a pop up to the user telling them they need to remove the venodr manually from QBD
-    # If they resync vendors and that vendor exists it will show up again in Stak.
+    response = {
+        "message_stak": "Successfully deleted vendor(s).",
+    }
+    response.update(response_agave)
 
-    return {"message": "Successfully deleted vendor(s)."}
+    return response
 
 
 @router.get("/{company_id}/get-vendors-agave")
@@ -277,7 +289,10 @@ async def sync_vendors_agave(
     results_dict = {}
     for result, (vendor_id, vendor) in zip(results, data.items()):
         if result is None:
-            results_dict[vendor_id] = {"message": "Error add vendor", "uuid": vendor_id}
+            results_dict[vendor_id] = {
+                "message": "Error adding vendor",
+                "uuid": vendor_id,
+            }
         else:
             results_dict[vendor_id] = await handle_qbd_response(
                 result, company_id, vendor, is_sync=True
