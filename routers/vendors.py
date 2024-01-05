@@ -1,5 +1,4 @@
 import asyncio
-import json
 from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +14,8 @@ from utils.agave_utils import (
 from config import PROJECT_NAME
 from utils.database.firestore import (
     get_all_project_details_data,
+    push_qbd_data_to_firestore,
+    push_qbd_data_to_firestore_batched,
     push_to_firestore,
     push_update_to_firestore,
     delete_collections_from_firestore,
@@ -22,10 +23,14 @@ from utils.database.firestore import (
 
 from utils import auth
 from utils.data_models.vendors import (
-    FullBulkVendorDataToAdd,
     FullVendorDataToAdd,
     SummaryVendorData,
 )
+from utils.vendor_utils import (
+    add_vendors_wrapper,
+    traverse_all_docs_and_match_empty_vendors,
+)
+
 from validation import io_validation
 
 
@@ -35,63 +40,18 @@ router = APIRouter()
 @router.get("/{company_id}/get-all-vendors")
 async def get_projects_data(
     company_id: str, current_user=Depends(auth.get_current_user)
-) -> str:
+) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
     doc = await get_all_project_details_data(
         project_name=PROJECT_NAME,
         collection_name=company_id,
         document_name="vendors",
-        doc_names=["vendor-details", "vendor-summary"],
+        doc_names=["vendor-summary"],
     )
 
-    return json.dumps(doc)
+    return doc
 
-
-@router.post("/{company_id}/add-vendors-bulk", status_code=201)
-async def add_vendors_bulk(
-    company_id: str,
-    data: FullBulkVendorDataToAdd,
-    current_user=Depends(auth.get_current_user),
-) -> dict:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
-
-    full_data = data.fullData
-    summary_data = data.summaryData
-
-    tasks = []
-    if full_data:
-        # the summary data and full data should have the same set of keys
-        for i, vendor_id in enumerate(full_data.keys()):
-            tasks.append(
-                asyncio.create_task(
-                    push_to_firestore(
-                        project_name=PROJECT_NAME,
-                        collection=company_id,
-                        data=full_data[vendor_id].dict(),
-                        document="vendors",
-                        doc_collection=vendor_id,
-                        doc_collection_document="vendor-details",
-                    )
-                )
-            )
-            tasks.append(
-                asyncio.create_task(
-                    push_to_firestore(
-                        project_name=PROJECT_NAME,
-                        collection=company_id,
-                        data=summary_data[vendor_id].dict(),
-                        document="vendors",
-                        doc_collection=vendor_id,
-                        doc_collection_document="vendor-summary",
-                    )
-                )
-            )
-        _ = await asyncio.gather(*tasks)
-
-        return {"message": f"Succesfully added all {i + 1} vendor(s)."}
-    else:
-        return {"message": "No new vendors."}
 
 
 @router.post("/{company_id}/add-vendor", status_code=201)
@@ -132,10 +92,9 @@ async def add_vendor(
     )
 
     task3 = add_vendors_to_qbd(
-        vendor_summary=new_summary_data.dict(), company_id=company_id
+        new_vendor_summary=new_summary_data.dict(), company_id=company_id
     )
 
-    # TODO add to QBD via agave function
     _, _, qbd_response = await asyncio.gather(task1, task2, task3)
 
     # returns a dict if the vendor already exists in quickbooks
@@ -178,7 +137,7 @@ async def update_vendor(
     # Only update in QBD if it already exists. If not the user has to manually sync this vendor.
     if new_summary_data.agave_uuid is not None:
         task3 = add_vendors_to_qbd(
-            vendor_summary=new_summary_data.dict(),
+            new_vendor_summary=new_summary_data.dict(),
             company_id=company_id,
             is_update=True,
         )
@@ -229,10 +188,13 @@ async def delete_vendor(
 
 
 @router.get("/{company_id}/get-vendors-agave")
-async def get_vendors_agave(company_id, current_user=Depends(auth.get_current_user)):
+async def get_vendors_agave(
+    company_id: str, current_user=Depends(auth.get_current_user)
+) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
     get_vendors_agave_task = get_all_vendors_from_agave(company_id)
+
     get_current_vendors_task = get_all_project_details_data(
         project_name=PROJECT_NAME,
         collection_name=company_id,
@@ -246,20 +208,44 @@ async def get_vendors_agave(company_id, current_user=Depends(auth.get_current_us
 
     new_vendors = find_unique_entries(response_dict, current_vendors_dict)
 
-    # save raw vendor data into firestore
-    # TODO need to push all vendors to their own collection in this document
-    await push_to_firestore(
+    # to batch or not to batch, that is the question
+    push_qbd_data_func = (
+        push_qbd_data_to_firestore_batched
+        if len(new_vendors["data"]) > 100
+        else push_qbd_data_to_firestore
+    )
+
+    _ = await push_qbd_data_func(
         project_name=PROJECT_NAME,
         collection=company_id,
-        data=response_dict,
+        data=new_vendors,
         document="quickbooks-desktop-data",
         doc_collection="vendors",
-        doc_collection_document="vendors",
+    )
+
+    unique_data_ext_names = set(
+        data_ext["DataExtName"]
+        for item in response_dict["data"]
+        if "source_data" in item
+        and "data" in item["source_data"]
+        and "DataExtRet" in item["source_data"]["data"]
+        for data_ext in item["source_data"]["data"]["DataExtRet"]
+        if "DataExtName" in data_ext
+    )
+
+    (
+        vendor_data_to_add_to_firestore,
+        update_doc_dict,
+    ) = await add_vendors_wrapper(
+        company_id=company_id,
+        new_vendors_to_add=new_vendors,
+        unique_data_ext_names=unique_data_ext_names,
     )
 
     return {
-        "message": f"Succesfully retrieved all {len(new_vendors)} new vendors.",
-        "agave_response_data": new_vendors,
+        "message": f"Succesfully retrieved all {len(new_vendors['data'])} new vendors.",
+        "agave_response_data": vendor_data_to_add_to_firestore["summaryData"],
+        "update_doc_data": update_doc_dict,
     }
 
 
@@ -277,7 +263,7 @@ async def sync_vendors_agave(
         tasks.append(
             asyncio.create_task(
                 add_vendors_to_qbd(
-                    vendor_summary=vendor.dict(),
+                    new_vendor_summary=vendor.dict(),
                     company_id=company_id,
                     is_update=False,
                 )
@@ -286,7 +272,9 @@ async def sync_vendors_agave(
     results = await asyncio.gather(*tasks)
 
     # Loop through all vendors that we are trying to sync and if they don't get synced return
+    # TODO try and match the newly synced vendors to current docs without agave_uuid
     results_dict = {}
+    vendor_summary_list = []
     for result, (vendor_id, vendor) in zip(results, data.items()):
         if result is None:
             results_dict[vendor_id] = {
@@ -297,5 +285,14 @@ async def sync_vendors_agave(
             results_dict[vendor_id] = await handle_qbd_response(
                 result, company_id, vendor, is_sync=True
             )
+            if "agave_uuid" in results_dict[vendor_id]:
+                vendor_summary_list.append(vendor.dict())
 
-    return {"data": results_dict}
+    update_doc_dict = {"contract": {}, "invoice": {}}
+    if vendor_summary_list:
+        update_doc_dict = await traverse_all_docs_and_match_empty_vendors(
+            company_id=company_id,
+            vendor_summary_list=vendor_summary_list,
+        )
+
+    return {"data": results_dict, "update_doc_data": update_doc_dict}

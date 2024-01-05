@@ -4,6 +4,7 @@ from pydantic import BaseModel
 
 # Cost Codes
 class SubItems(BaseModel):
+    agave_uuid: str
     name: str
     number: str
     id: str
@@ -16,6 +17,7 @@ class SubItems(BaseModel):
 
 
 class Divisions(BaseModel):
+    agave_uuid: str
     name: str
     number: str
     subItems: List[SubItems]

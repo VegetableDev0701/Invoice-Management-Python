@@ -19,6 +19,7 @@ MESSAGE_STREAM_RETRY_TIMEOUT = 15000
 MESSAGE_STREAM_DELAY = 1
 HEARTBEAT_INTERVAL = 5
 
+BATCH_SIZE_CUTOFF = 50
 RETRY_TIMES = 3
 
 # needed for getting signed urls inside a google cloud run
@@ -50,3 +51,11 @@ QBD_ITEM_TYPES = [
     "SalesTaxGroup",
     "ItemGroup",
 ]
+
+QBD_INIT_ITEM_TYPE = "Service"
+
+QBD_VENDOR_EXT_NAMES_LOOKUP_KEY = "qbd_custom_vendor_ext_name_lookup"
+
+INITIAL = 5
+JITTER = 5
+

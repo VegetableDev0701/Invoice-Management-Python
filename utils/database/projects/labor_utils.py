@@ -14,17 +14,19 @@ from utils.data_models.projects import SummaryLabor
 from utils.database.db_utils import set_target_value
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
 
 # Create a logger
 firestore_labor_logger = logging.getLogger("error_logger")
 firestore_labor_logger.setLevel(logging.DEBUG)
-
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
-# )
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -40,13 +42,15 @@ async def remove_change_order_from_labor_data(
     project_name: str,
     company_id: str,
     project_id: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     db = firestore.AsyncClient(project=project_name)
 
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_labor_logger, logging.DEBUG),
@@ -110,28 +114,3 @@ async def remove_change_order_from_labor_data(
 
     finally:
         db.close()
-
-
-def _update_target_value(target_id, input_elements, set_value):
-    for element in input_elements:
-        if is_input_element_with_items(element):
-            found_item = next(
-                (item for item in element["items"] if item["id"] == target_id), None
-            )
-            if found_item:
-                found_item["value"] = set_value
-                return True
-        if is_input_element_with_address_elements(element):
-            for address_element in element["addressElements"]:
-                found_item = next(
-                    (
-                        item
-                        for item in address_element["items"]
-                        if item["id"] == target_id
-                    ),
-                    None,
-                )
-                if found_item:
-                    found_item["value"] = set_value
-                    return True
-    return False

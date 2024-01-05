@@ -14,17 +14,20 @@ from tenacity import (
 )
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
 
 # Create a logger
 co_utils_logger = logging.getLogger("error_logger")
 co_utils_logger.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
-# )
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -43,12 +46,14 @@ async def update_invoice_in_change_order_in_firestore(
     change_order_id: str,
     doc_collection: str,
     doc_collection_document: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(co_utils_logger, logging.DEBUG),

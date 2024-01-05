@@ -1,5 +1,5 @@
 import asyncio
-from typing import List
+from typing import Dict, List
 import json
 import logging
 import sys
@@ -16,17 +16,21 @@ from tenacity import (
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 
 from global_vars.globals_invoice import PROJECT_DETAILS_MATCHING_KEYS
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import BATCH_SIZE_CUTOFF, INITIAL, JITTER, RETRY_TIMES
 
 # Create a logger
 firestore_io_logger = logging.getLogger("error_logger")
 firestore_io_logger.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
-# )
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
+
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -45,12 +49,15 @@ async def get_from_firestore(
     doc_collection_document: str | None = None,
     doc_collection_doc_collection: str | None = None,
     doc_collection_doc_collection_document: str | None = None,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
+
 ):
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -167,12 +174,15 @@ async def fetch_project_if_active(
         raise
 
 
-async def fetch_all_active_projects(company_id: str, project_name: str):
+async def fetch_all_active_projects(
+    company_id: str, project_name: str, initial: int = INITIAL, jitter: int = JITTER
+):
+
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -214,12 +224,14 @@ async def fetch_vendor_summary(db, company_id: str, vendor_id: str) -> dict:
         raise
 
 
-async def fetch_all_vendor_summaries(company_id: str, project_name: str):
+async def fetch_all_vendor_summaries(
+    company_id: str, project_name: str, initial: int = INITIAL, jitter: int = JITTER
+):
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -247,29 +259,33 @@ async def fetch_all_vendor_summaries(company_id: str, project_name: str):
         db.close()
 
 
-async def stream_all_project_data(
+async def stream_all_docs_from_collection(
     project_name: str,
-    collection_name: str,
+    company_id: str,
     document_name: str,
-    project_id: str,
+    collection_name: str,
+    coll_doc: str | None = None,
+    coll_doc_coll: str | None = None,
 ):
     db = firestore.AsyncClient(project=project_name)
     try:
-        project_collection_ref = (
-            db.collection(collection_name)
+        coll_ref = (
+            db.collection(company_id)
             .document(document_name)
-            .collection(project_id)
+            .collection(collection_name)
         )
-        project_data = {}
+        if coll_doc and coll_doc_coll:
+            coll_ref = coll_ref.document(coll_doc).collection(coll_doc_coll)
+        result_data = {}
         tasks = [
             asyncio.create_task(fetch_project_document(doc))
-            async for doc in project_collection_ref.list_documents()
+            async for doc in coll_ref.list_documents()
             if doc.id != "client-bills"
         ]
         results = await asyncio.gather(*tasks)
         for doc_id, doc_dict in results:
-            project_data[doc_id] = doc_dict
-        return project_data
+            result_data[doc_id] = doc_dict
+        return result_data
     except Exception as e:
         firestore_io_logger.exception(
             f"An error occurred streaming all project data: {e}"
@@ -281,8 +297,8 @@ async def stream_all_project_data(
 async def stream_entire_collection(
     project_name: str,
     collection_name: str,
-    document_name: str,
-    doc_collection_name: str,
+    document_name: str | None = None,
+    doc_collection_name: str | None = None,
     sub_collection_document: str | None = None,
     sub_collection: str | None = None,
 ) -> dict:
@@ -293,16 +309,18 @@ async def stream_entire_collection(
     docs = {}
     db = firestore.AsyncClient(project=project_name)
     try:
-        collection_ref = (
-            db.collection(collection_name)
-            .document(document_name)
-            .collection(doc_collection_name)
-        )
+        collection_ref = db.collection(collection_name)
+        if document_name and doc_collection_name:
+            collection_ref = (
+                db.collection(collection_name)
+                .document(document_name)
+                .collection(doc_collection_name)
+            )
 
-        if sub_collection and sub_collection_document:
-            collection_ref = collection_ref.document(
-                sub_collection_document
-            ).collection(sub_collection)
+            if sub_collection and sub_collection_document:
+                collection_ref = collection_ref.document(
+                    sub_collection_document
+                ).collection(sub_collection)
 
         async for doc in collection_ref.stream():
             doc_dict = doc.to_dict()
@@ -379,6 +397,9 @@ async def push_to_firestore(
     document: str | None = None,
     doc_collection: str | None = None,
     doc_collection_document: str | None = None,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
+    overwrite_data: bool = False,
 ):
     """
     Pushes data to firestore. If a path_to_json is provided, it will load that json data
@@ -389,27 +410,192 @@ async def push_to_firestore(
 
     db = firestore.AsyncClient(project=project_name)
     try:
-        document_ref = db.collection(collection).document(document)
-        if doc_collection and doc_collection_document:
-            document_ref = document_ref.collection(doc_collection).document(
-                doc_collection_document
-            )
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(RETRY_TIMES),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+            retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+            reraise=True,
+            before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
+        ):
+            with attempt:
+                document_ref = db.collection(collection).document(document)
+                if doc_collection and doc_collection_document:
+                    document_ref = document_ref.collection(doc_collection).document(
+                        doc_collection_document
+                    )
 
-        if path_to_json:
-            with open(path_to_json, "r") as file:
-                firestore_data = json.load(file)
-        else:
-            firestore_data = data.copy()
+                if path_to_json:
+                    with open(path_to_json, "r") as file:
+                        firestore_data = json.load(file)
+                else:
+                    firestore_data = data.copy()
+                doc = await document_ref.get()
+                if doc.exists and not overwrite_data:
+                    await document_ref.update(firestore_data)
+                else:
+                    await document_ref.set(firestore_data)
 
-        doc = await document_ref.get()
-        if doc.exists:
-            await document_ref.update(firestore_data)
-        else:
-            await document_ref.set(firestore_data)
+    except RetryError as e:
+        firestore_io_logger.error(
+            f"RETRYERROR: {e} occured while trying to get data from firestore"
+        )
+        raise
+
+    except Exception as e:
+        firestore_io_logger.exception(f"An error occurred getting data: {e}")
+    finally:
+        db.close()
+
+
+async def push_to_firestore_batch(
+    project_name: str,
+    collection: str,
+    documents: List[Dict],
+    initial: int = 10,
+    jitter: int = 5,
+):
+    db = firestore.AsyncClient(project=project_name)
+    count = 0
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(RETRY_TIMES),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+            retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+            reraise=True,
+            before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
+        ):
+            with attempt:
+                batch = db.batch()
+                for doc_data in documents:
+                    doc_ref = db.collection(collection).document(doc_data["document"])
+                    if (
+                        "doc_collection" in doc_data
+                        and "doc_collection_document" in doc_data
+                    ):
+                        doc_ref = doc_ref.collection(
+                            doc_data["doc_collection"]
+                        ).document(doc_data["doc_collection_document"])
+                    batch.set(doc_ref, doc_data["data"])
+                    count += 1
+                    if count % 500 == 0:
+                        await batch.commit()
+                        batch = db.batch()
+                await batch.commit()
+
+    except RetryError as e:
+        firestore_io_logger.error(
+            f"RETRYERROR: {e} occurred while trying to write to Firestore"
+        )
+        raise
+
+    except Exception as e:
+        firestore_io_logger.exception(f"An error occurred writing to Firestore: {e}")
+    finally:
+        db.close()
+
+
+async def push_qbd_items_data_to_firestore(
+    project_name: str, collection: str, document: str, items_data: dict
+):
+    db = firestore.AsyncClient(project=project_name)
+    try:
+        tasks = []
+        ref = (
+            db.collection(collection)
+            .document(document)
+            .collection("items")
+            .document("items")
+        )
+        for url, status, data in items_data:
+            if status != 200:
+                continue
+            typ = url.split("type=")[-1]
+            type_ref = ref.collection(typ)
+
+            # batching
+            if len(data["data"]) > BATCH_SIZE_CUTOFF:
+                batch = db.batch()
+                count = 0
+                for item in data["data"]:
+                    doc_ref = type_ref.document(item["id"])
+                    batch.set(doc_ref, item)
+                    count += 1
+                    if count % 500 == 0:
+                        await batch.commit()
+                        batch = db.batch()
+                await batch.commit()
+            # not batching
+            else:
+                for item in data["data"]:
+                    doc_ref = type_ref.document(item["id"])
+                    tasks.append(asyncio.create_task(doc_ref.set(item)))
+                _ = await asyncio.gather(*tasks)
 
     except Exception as e:
         firestore_io_logger.exception(
-            f"An error occurred pushing data to firestore: {e}"
+            f"An error occurred saving QBD items to Firestore: {e}"
+        )
+    finally:
+        db.close()
+
+
+async def safe_set(doc_ref, item):
+    try:
+        await doc_ref.set(item)
+    except Exception as e:
+        firestore_io_logger.error(f"Error writing document {doc_ref.id}: {e}")
+        # Handle or log the error for this specific document
+
+
+async def push_qbd_data_to_firestore_batched(
+    project_name: str,
+    collection: str,
+    document: str,
+    doc_collection: str,
+    data: dict,
+):
+    db = firestore.AsyncClient(project=project_name)
+    batch = db.batch()
+    count = 0
+    try:
+        ref = db.collection(collection).document(document).collection(doc_collection)
+        for item in data["data"]:
+            doc_ref = ref.document(item["id"])
+            batch.set(doc_ref, item)
+            count += 1
+            if count % 500 == 0:
+                await batch.commit()
+                batch = db.batch()
+        await batch.commit()
+    except Exception as e:
+        firestore_io_logger.exception(
+            f"An error occurred saving QBD items to Firestore: {e}"
+        )
+    finally:
+        db.close()
+
+
+async def push_qbd_data_to_firestore(
+    project_name: str,
+    collection: str,
+    document: str,
+    doc_collection: str,
+    data: dict,
+):
+    db = firestore.AsyncClient(project=project_name)
+
+    try:
+        tasks = []
+        ref = db.collection(collection).document(document).collection(doc_collection)
+        for item in data["data"]:
+            doc_ref = ref.document(item["id"])
+            tasks.append(asyncio.create_task(safe_set(doc_ref, item)))
+
+        _ = await asyncio.gather(*tasks, return_exceptions=True)
+
+    except Exception as e:
+        firestore_io_logger.exception(
+            f"An error occurred saving QBD items to Firestore: {e}"
         )
     finally:
         db.close()
@@ -479,12 +665,14 @@ async def delete_collections_from_firestore(
     collection_name: str | None = None,
     doc_collection_name: str | None = None,
     doc_collection_doc_name: str | None = None,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -543,12 +731,14 @@ async def delete_summary_data_from_firestore(
     data: List[str],
     document_name: str,
     sub_document_name: str | None = None,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -583,12 +773,14 @@ async def delete_project_items_from_firestore(
     document_name: str,
     project_key: str,
     doc_collection_names: List[str],
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -623,12 +815,14 @@ async def update_invoice_projects_in_firestore(
     invoices: List[str],
     document_name: str,
     collection_name: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -668,12 +862,14 @@ async def update_processed_invoices_in_firestore(
     document_name: str,
     collection_name: str,
     data: dict,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -719,12 +915,14 @@ async def remove_change_order_id_from_invoices_in_firestore(
     change_order_id: str,
     document_name: str,
     collection_name: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -788,12 +986,14 @@ async def add_gpt_line_items_to_invoice_data_in_firestore(
     document_name: str,
     collection_name: str,
     data: dict,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -832,12 +1032,14 @@ async def update_approved_invoice_in_firestore(
     document_name: str,
     collection_name: str,
     is_approved: bool,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
@@ -874,12 +1076,14 @@ async def push_update_to_firestore(
     sub_document_name: str | None = None,
     doc_collection: str | None = None,
     doc_collection_document: str | None = None,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),

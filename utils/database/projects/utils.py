@@ -2,6 +2,7 @@ import logging
 import sys
 from typing import Any, Dict
 import asyncio
+import re
 
 from google.cloud import firestore
 from tenacity import (
@@ -16,22 +17,24 @@ from tenacity import (
 from utils.data_models.projects import AddClientBillData
 from utils.data_models.budgets import UpdateCostCode
 from utils.data_models.charts import BaseReportDataItem
-from utils.database import db_utils
 from utils.database.firestore import stream_entire_collection
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 from global_vars.globals_invoice import PROJECT_DETAILS_MATCHING_KEYS
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
 from config import PROJECT_NAME
 
 # Create a logger
 logger_project_utils = logging.getLogger("error_logger")
 logger_project_utils.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/add_client_bill.log"
-# )
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/add_client_bill.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -240,8 +243,37 @@ def convert_report_data_to_list(list: dict[str, list], data: BaseReportDataItem)
     list["Difference"].append(data.difference)
     list["%"].append(data.percent)
 
+
 def custom_sort(item):
-    return int(str(item["number"]).split('.')[1])
+    return int(str(item["number"]).split(".")[1])
+
+
+def extract_string(s: str, is_extract_number: bool):
+    """
+    Returns any found numbers and a boolean to show if a number was found.
+    This will return the first match. It will also extract non numbers when
+    setting the is_extract_number to False.
+    Example:
+        01 General Conditions -> 01
+        01General Conditions -> 01
+        General Conditions 01 -> 01
+        General Conditions 01 10 10.23 -> 01 10 10.23
+    """
+    pattern = r"\d+(?: \d+)*(?:\.\d+)?"
+    if is_extract_number:
+        matches = re.findall(pattern, s)
+        if matches:
+            return matches[0], True
+        else:
+            return s, False
+    else:
+        word = re.sub(pattern, "", s)
+        return word.strip()
+
+
+def format_name_for_id(string: str):
+    return string.lower().replace(" ", "-").replace("&", "and")
+
 
 async def update_all_project_budgets(
     project_name: str, collection: str, document: str, data: list[UpdateCostCode]
@@ -530,6 +562,7 @@ async def add_client_bill_actuals(
     finally:
         db.close()
 
+
 async def update_client_bill_details(
     project_name: str, collection: str, project_id: str, client_bill_id: str, data: dict
 ):
@@ -540,7 +573,7 @@ async def update_client_bill_details(
     laborSummary = data.laborSummary
     bill_summary = data.clientBillSummary
     bill_work_description = data.clientBillObj
-    try: 
+    try:
         client_bill_ref = (
             db.collection(collection)
             .document("projects")
@@ -556,10 +589,14 @@ async def update_client_bill_details(
             labor_dict = labor.dict()
             await client_bill_ref.document("labor").set(labor_dict["__root__"])
         if laborSummary is not None:
-            laborSummary_dict = {f"{item.uuid}": item.dict() for index, item in enumerate(laborSummary)}
+            laborSummary_dict = {
+                f"{item.uuid}": item.dict() for index, item in enumerate(laborSummary)
+            }
             await client_bill_ref.document("labor-summary").set(laborSummary_dict)
         if bill_work_description is not None:
-            await client_bill_ref.document("bill-work-description").set(bill_work_description.dict())
+            await client_bill_ref.document("bill-work-description").set(
+                bill_work_description.dict()
+            )
 
         client_bill_summary_ref = (
             db.collection(collection)
@@ -573,13 +610,14 @@ async def update_client_bill_details(
         client_bill_summary_data[client_bill_id] = bill_summary.dict()
 
         await client_bill_summary_ref.set(client_bill_summary_data)
-        return {"status" : "success"}
-        
+        return {"status": "success"}
+
     except Exception as e:
         logger_project_utils.exception(f"Error updating client bill: {e}")
         return {"message": "Error updating client bill."}
-    finally:   
+    finally:
         db.close()
+
 
 async def update_client_bill_details(
     project_name: str, collection: str, project_id: str, client_bill_id: str, data: dict
@@ -644,6 +682,8 @@ async def copy_doc_to_db(
     destination_document: str,
     doc_id: str | None,
     doc: dict,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     """
     Copy a document to a destination in a Firestore database.
@@ -676,7 +716,7 @@ async def copy_doc_to_db(
             copy_doc = doc
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(logger_project_utils, logging.DEBUG),
@@ -737,6 +777,8 @@ async def copy_doc_to_db(
 async def delete_doc_from_db(
     source_ref: firestore.AsyncCollectionReference,
     doc_id: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     """
     Delete a document from a Firestore database.
@@ -759,7 +801,7 @@ async def delete_doc_from_db(
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(logger_project_utils, logging.DEBUG),
@@ -792,12 +834,14 @@ async def get_client_bill_current_actuals_from_firestore(
     collection: str,
     project_id: str,
     client_bill_id: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> dict | None:
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(logger_project_utils, logging.DEBUG),
@@ -833,11 +877,13 @@ async def get_client_bill_from_firestore(
     collection: str,
     project_id: str,
     client_bill_id: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> dict | None:
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(logger_project_utils, logging.DEBUG),

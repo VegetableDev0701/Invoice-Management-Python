@@ -1,5 +1,4 @@
 import asyncio
-import json
 
 from fastapi import APIRouter, Depends
 
@@ -15,7 +14,7 @@ router = APIRouter()
 @router.get("/{company_id}/cost-codes")
 async def get_cost_codes(
     company_id: str, current_user=Depends(auth.get_current_user)
-) -> str:
+) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
     cost_codes = await get_from_firestore(
@@ -24,7 +23,7 @@ async def get_cost_codes(
         document_name="cost-codes",
     )
 
-    return json.dumps(cost_codes)
+    return cost_codes
 
 
 @router.post("/{company_id}/update-cost-codes")
@@ -43,8 +42,12 @@ async def update_cost_codes(
     )
 
     task2 = save_updated_cost_codes_to_gcs(
-        company_id=company_id, data=data.dict(), bucket="stak-company-files"
+        company_id=company_id, data=data.dict(), bucket="stak-customer-cost-codes"
     )
+
+    # TODO Add a sync to quickbooks function like with vendors.
+    # TODO add the newly returned agave_uuids to firestore and storage
+    # TODO return the agave_uuids to the frontend to be added to the state
 
     _ = asyncio.gather(task1, task2)
 

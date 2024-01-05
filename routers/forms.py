@@ -1,5 +1,3 @@
-import json
-
 from fastapi import APIRouter, Depends
 
 from config import PROJECT_NAME
@@ -13,7 +11,7 @@ router = APIRouter()
 @router.get("/{company_id}/all-forms")
 async def get_forms(
     company_id: str, current_user=Depends(auth.get_current_user)
-) -> str:
+) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
     form_docs = await stream_entire_collection(
@@ -23,4 +21,4 @@ async def get_forms(
         doc_collection_name="forms",
     )
 
-    return json.dumps(form_docs)
+    return form_docs

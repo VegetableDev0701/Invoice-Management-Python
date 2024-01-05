@@ -14,19 +14,21 @@ from tenacity import (
 
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 from config import PROJECT_NAME
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
 from config import PROJECT_NAME
 
 # Create a logger
 ar_invoice_logger = logging.getLogger("error_logger")
 ar_invoice_logger.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
-# )
-
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -38,13 +40,17 @@ ar_invoice_logger.addHandler(handler)
 
 
 async def get_agave_customer_id(
-    company_id: str, customer_name: str, customer_email: str
+    company_id: str,
+    customer_name: str,
+    customer_email: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     db = firestore.AsyncClient(project=PROJECT_NAME)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(ar_invoice_logger, logging.DEBUG),
@@ -82,13 +88,17 @@ async def get_agave_customer_id(
 
 
 async def build_ar_invoice_request_data(
-    company_id: str, project_id: str, client_bill_id: str
+    company_id: str,
+    project_id: str,
+    client_bill_id: str,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     db = firestore.AsyncClient(project=PROJECT_NAME)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(ar_invoice_logger, logging.DEBUG),

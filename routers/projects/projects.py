@@ -18,7 +18,7 @@ from utils.database.firestore import (
     push_update_to_firestore,
     delete_collections_from_firestore,
     delete_summary_data_from_firestore,
-    stream_all_project_data,
+    stream_all_docs_from_collection,
     update_project_status,
 )
 
@@ -71,11 +71,11 @@ async def get_all_project_data(
     """
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
-    project_data = await stream_all_project_data(
+    project_data = await stream_all_docs_from_collection(
         project_name=PROJECT_NAME,
-        collection_name=company_id,
+        company_id=company_id,
         document_name="projects",
-        project_id=project_id,
+        collection_name=project_id,
     )
 
     if project_data is None:

@@ -102,7 +102,7 @@ async def save_updated_cost_codes_to_gcs(company_id: str, data: dict, bucket: st
     Saves data to a location in GCS.
     """
     bucket = get_storage_bucket(bucket)
-    file_name = f"cost-codes/{company_id}/cost-codes.json"
+    file_name = f"{company_id}/cost-codes.json"
 
     blob = bucket.blob(file_name)
     blob.upload_from_string(data=json.dumps(data), content_type="application/json")

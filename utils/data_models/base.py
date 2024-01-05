@@ -2,5 +2,5 @@ from pydantic import BaseModel
 
 
 class NameWithId(BaseModel):
-    uuid: str
+    uuid: str | None
     name: str

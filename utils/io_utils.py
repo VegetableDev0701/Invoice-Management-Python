@@ -153,8 +153,13 @@ async def create_secret_id(company_id: str) -> str:
 
 
 async def fetch_post(session, url, payload, headers):
-    async with session.post(url, data=payload.encode(), headers=headers) as response:
-        return response.status
+    try:
+        data = payload.encode()
+    except AttributeError:
+        data = payload
+
+    async with session.post(url, data=data, headers=headers) as response:
+        return response
 
 
 async def fetch_delete(session, url, headers):

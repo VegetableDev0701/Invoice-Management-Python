@@ -23,6 +23,8 @@ from routers import (
     websocket,
     agave,
     onboard_new_user_router,
+    employees_customers
+
 )
 from routers.projects import (
     projects,
@@ -74,6 +76,7 @@ app.include_router(budget.router)
 app.include_router(client_bill.router)
 app.include_router(agave.router)
 app.include_router(onboard_new_user_router.router)
+app.include_router(employees_customers.router)
 
 app.add_middleware(
     CORSMiddleware,

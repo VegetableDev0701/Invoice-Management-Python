@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import sys
-import os
 
 from google.cloud import firestore
 from tenacity import (
@@ -14,7 +13,7 @@ from tenacity import (
 )
 
 from config import PROJECT_NAME
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
 from utils import io_utils, storage_utils
 from utils.database.firestore import push_to_firestore
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
@@ -23,12 +22,13 @@ from utils.retry_utils import RETRYABLE_EXCEPTIONS
 onboard_logger = logging.getLogger("error_logger")
 onboard_logger.setLevel(logging.DEBUG)
 
-# if os.getenv("ENV") == "development":  # Get the directory of your script
-#     handler = logging.FileHandler(
-#         "/Users/mgrant/STAK/app/stak-backend/api/logs/onbaording_logs.log"
-#     )
-# else:
-handler = logging.StreamHandler(sys.stdout)
+try:
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/onbaording_logs.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -39,13 +39,15 @@ handler.setFormatter(formatter)
 onboard_logger.addHandler(handler)
 
 
-async def check_user_email(user_email: str) -> bool:
+async def check_user_email(
+    user_email: str, initial: int = INITIAL, jitter: int = JITTER
+) -> bool:
     db = firestore.AsyncClient(project=PROJECT_NAME)
     domain = user_email.split("@")[-1]
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(onboard_logger, logging.DEBUG),
@@ -94,12 +96,14 @@ async def client_email_exists(db: firestore.AsyncClient, user_email: str) -> boo
     return False
 
 
-async def onboard_new_user(domain: str, user_email: str):
+async def onboard_new_user(
+    domain: str, user_email: str, initial: int = INITIAL, jitter: int = JITTER
+):
     db = firestore.AsyncClient(project=PROJECT_NAME)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(onboard_logger, logging.DEBUG),
@@ -123,13 +127,11 @@ async def onboard_new_user(domain: str, user_email: str):
                         business_state = None
                         business_zip = None
 
-
                 new_user_id = io_utils.create_short_uuid()
 
                 tasks = []
                 # This checks if the company already exists and if not run these tasks
                 if company_name is None:
-
                     user_data = {
                         "company_id": company_id,
                         "user_email": user_email,

@@ -1,6 +1,5 @@
 import asyncio
 import datetime
-import json
 from typing import Dict, List, Union
 import aiofiles
 import logging
@@ -55,11 +54,14 @@ from global_vars.globals_io import (
 logger_invoices = logging.getLogger("error_logger")
 logger_invoices.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/invoices.log"
-# )
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/invoices.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 
 handler.setLevel(logging.DEBUG)
 
@@ -86,7 +88,7 @@ router = APIRouter()
 @router.get("/{company_id}/get-all-invoices")
 async def get_all_invoices(
     company_id: str, current_user=Depends(auth.get_current_user)
-) -> str:
+) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
     invoices = await stream_entire_collection(
@@ -96,7 +98,7 @@ async def get_all_invoices(
         doc_collection_name="processed_documents",
     )
 
-    return json.dumps(invoices, default=str)
+    return invoices
 
 
 @router.get("/{company_id}/invoice/generate-signed-url")

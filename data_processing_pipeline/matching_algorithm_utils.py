@@ -1,7 +1,7 @@
 import asyncio
 import json
 import re
-from typing import Tuple, Union
+from typing import List, Tuple
 from dotenv import load_dotenv
 import os
 import logging
@@ -11,10 +11,11 @@ import numpy as np
 import openai
 from thefuzz import process, fuzz
 from sentence_transformers import SentenceTransformer, util
+from torch import Tensor
 
 from config import Config, PROJECT_NAME
 from utils import model_utils
-from utils.database.firestore import fetch_all_vendor_summaries, get_from_firestore
+from utils.database.firestore import fetch_all_vendor_summaries
 from global_vars.globals_invoice import PROJECT_ENTITIES_FOR_MATCHING
 from global_vars.prompts import Prompts
 from utils.data_models.vendors import PredictedVendorModel
@@ -27,12 +28,14 @@ openai.api_key = OPENAI_API_KEY
 logger = logging.getLogger("error_logger")
 logger.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/matching_algorithm_logger.log"
-# )
-# Create stremhandler for docker
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/matching_algorithm_logger.log"
+    )
+except:
+    # Create stremhandler for docker
+    handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -513,7 +516,11 @@ async def get_vendor_name(
 
 
 async def match_predicted_vendor(
-    company_id: str, pred_vendor_name_dict: dict | None
+    company_id: str,
+    pred_vendor_name_dict: dict | None,
+    all_vendor_summary_list: dict | None = None,
+    model: SentenceTransformer | None = None,
+    vendors_emb: List[Tensor] | np.ndarray | Tensor | None = None,
 ) -> PredictedVendorModel:
     """
     Match the predicted vendor name to the list of vendors from the quickbooks-desktop
@@ -525,36 +532,29 @@ async def match_predicted_vendor(
     returns:
         matched_vendor_name(dict): the vendor name and uuid
     """
+    if all_vendor_summary_list is None:
+        all_vendor_summary_list = await fetch_all_vendor_summaries(
+            company_id=company_id, project_name=PROJECT_NAME
+        )
 
-    all_vendors_dict = await fetch_all_vendor_summaries(
-        company_id=company_id, project_name=PROJECT_NAME
-    )
+    # Using dict.get() with a default value of an empty dict for "vendor"
+    vendor_name = pred_vendor_name_dict.get(
+        "supplier_name"
+    ) or pred_vendor_name_dict.get("vendor", {}).get("name")
+    is_invoice = "supplier_name" in pred_vendor_name_dict
 
-    if pred_vendor_name_dict.get("supplier_name"):
-        vendor_name = pred_vendor_name_dict["supplier_name"]
-        is_invoice = True
-    elif pred_vendor_name_dict.get("vendor"):
-        vendor_name = pred_vendor_name_dict["vendor"]
-        is_invoice = False
-    else:
-        vendor_name = None
-
-    if all_vendors_dict:
+    if all_vendor_summary_list:
         vendor_name_list = [
             {
                 "name": vendor.get("vendorName"),
                 "agave_uuid": vendor.get("agave_uuid"),
                 "uuid": vendor.get("uuid"),
             }
-            for vendor in all_vendors_dict
+            for vendor in all_vendor_summary_list
             if vendor
         ]
-
         if vendor_name_list:
             # init model with all vendor names
-            model, vendors_emb = init_sentence_similarity_model(
-                [x["name"] for x in vendor_name_list]
-            )
             # check if this is an invoice or contract
             if vendor_name is None:
                 if is_invoice:
@@ -570,13 +570,18 @@ async def match_predicted_vendor(
                         {
                             "vendor": {
                                 "name": vendor_name,
-                                "uuid": None,
                                 "agave_uuid": None,
                                 "vendor_match_conf_score": None,
                             },
                         }
                     )
                     return pred_vendor_name_dict
+            # only initialize the model if model and vendors_emb was not added as a a param
+            # and if vendor_name is not None.
+            if model is None and vendors_emb is None:
+                model, vendors_emb = init_sentence_similarity_model(
+                    [x["name"] for x in vendor_name_list]
+                )
         else:
             if is_invoice:
                 pred_vendor_name_dict.update(
@@ -591,7 +596,6 @@ async def match_predicted_vendor(
                     {
                         "vendor": {
                             "name": vendor_name,
-                            "uuid": None,
                             "agave_uuid": None,
                             "vendor_match_conf_score": None,
                         },
@@ -641,7 +645,6 @@ async def match_predicted_vendor(
                     {
                         "vendor": {
                             "name": vendor_name,
-                            "uuid": None,
                             "agave_uuid": None,
                             "vendor_match_conf_score": None,
                         },
@@ -667,5 +670,6 @@ async def match_predicted_vendor(
                     },
                 }
             )
+
 
     return pred_vendor_name_dict

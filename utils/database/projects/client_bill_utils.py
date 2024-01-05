@@ -16,7 +16,7 @@ from tenacity import (
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 
 from config import PROJECT_NAME
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
 from utils.database.firestore import (
     delete_project_items_from_firestore,
     delete_collections_from_firestore,
@@ -28,11 +28,14 @@ from config import PROJECT_NAME
 client_bill_utils_logger = logging.getLogger("error_logger")
 client_bill_utils_logger.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
-# )
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -84,13 +87,17 @@ async def delete_client_bill_background(
 
 
 async def get_invoice_ids_from_client_bills(
-    company_id: str, project_id: str, client_bill_ids: List[str]
+    company_id: str,
+    project_id: str,
+    client_bill_ids: List[str],
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> List[str]:
     db = firestore.AsyncClient(project=PROJECT_NAME)
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(client_bill_utils_logger, logging.DEBUG),

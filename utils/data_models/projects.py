@@ -192,3 +192,4 @@ class ContractEntry(BaseModel):
     gcs_uri: str
     summaryData: ContractSummaryData
     uuid: str
+

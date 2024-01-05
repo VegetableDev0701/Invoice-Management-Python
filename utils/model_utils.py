@@ -14,7 +14,7 @@ from tenacity import (
 from config import Config
 
 from utils.retry_utils import OPENAI_RETRYABLE_EXCEPTIONS
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
 
 # Create a logger
 
@@ -24,18 +24,20 @@ num_tokens_logger.setLevel(logging.DEBUG)
 gpt_logger = logging.getLogger("error_logger")
 gpt_logger.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/gpt_model_errors.log"
-# )
-# handler_num_tokens = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/gpt_token_count.log"
-# )
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/gpt_model_errors.log"
+    )
+    handler_num_tokens = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/gpt_token_count.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
+    handler_num_tokens = logging.StreamHandler(sys.stdout)
 
-handler_num_tokens = logging.StreamHandler(sys.stdout)
 handler_num_tokens.setLevel(logging.INFO)
-
-handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -54,6 +56,8 @@ async def get_completion_gpt4(
     model: str = Config.GPT4_TURBO_LATEST_PREVIEW,
     temperature: float = 0.3,
     job_type: str | None = None,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     num_tokens = num_tokens_from_messages(messages=messages)
     num_tokens_logger.info(f"Job: {job_type}; Input tokens: {num_tokens}")
@@ -64,7 +68,7 @@ async def get_completion_gpt4(
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(OPENAI_RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(gpt_logger, logging.DEBUG),
@@ -107,6 +111,8 @@ async def get_completion_gpt35(
     model: str = Config.GPT35_TURBO_LATEST,
     temperature: float = 0.3,
     job_type: str | None = None,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ):
     num_tokens = num_tokens_from_messages(messages=messages)
     num_tokens_logger.info(f"Job: {job_type}; Input tokens: {num_tokens}")
@@ -117,7 +123,7 @@ async def get_completion_gpt35(
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(OPENAI_RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(gpt_logger, logging.DEBUG),

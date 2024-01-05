@@ -24,16 +24,19 @@ from utils.database.firestore import (
 from utils.io_utils import delete_document_hash_from_firestore
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 from config import PROJECT_NAME, CUSTOMER_DOCUMENT_BUCKET
-from global_vars.globals_io import RETRY_TIMES
+from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
 
 logger_invoices = logging.getLogger("error_logger")
 logger_invoices.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/invoices.log"
-# )
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/invoices.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 
 # Create a logging format
@@ -133,6 +136,8 @@ async def update_invoice_processed_data(
     document_name: str,
     collection_name: str,
     data: InvoiceProcessedData,
+    initial: int = INITIAL,
+    jitter: int = JITTER,
 ) -> None:
     db = firestore.AsyncClient(project=project_name)
     update_processed_data = data.dict()["__root__"]
@@ -141,7 +146,7 @@ async def update_invoice_processed_data(
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(RETRY_TIMES),
-            wait=wait_exponential_jitter(),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
             retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
             reraise=True,
             before_sleep=before_sleep_log(logger_invoices, logging.DEBUG),

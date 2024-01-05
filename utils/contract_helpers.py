@@ -33,11 +33,14 @@ bucket = client.get_bucket(CUSTOMER_DOCUMENT_BUCKET)
 upload_contract_logger = logging.getLogger("error_logger")
 upload_contract_logger.setLevel(logging.DEBUG)
 
-# Create a file handler
-# handler = logging.FileHandler(
-#     "/Users/mgrant/STAK/app/stak-backend/api/logs/upload_contract.log"
-# )
-handler = logging.StreamHandler(sys.stdout)
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/upload_contract.log"
+    )
+except Exception as e:
+    print(e)
+    handler = logging.StreamHandler(sys.stdout)
 
 handler.setLevel(logging.DEBUG)
 
