@@ -484,6 +484,7 @@ def create_customer_return_dict(customers: Dict) -> list:
             "agave_uuid": customer.get("id"),
             "sub_level": int(customer["source_data"]["data"].get("Sublevel")),
             "email": customer.get("email"),
+            "phone": customer.get("phone"),
             "uuid": uuid,
         }
     return return_dict
@@ -563,7 +564,7 @@ async def init_ingest_all_qbd_data(
                     )
                 )
             )
-            # TODO cretae a minimal customers dict/object to send to FE
+            
         if employees:
             push_func = (
                 push_qbd_data_to_firestore_batched

@@ -101,8 +101,8 @@ async def listen_to_firestore_invoice_updates(
                 )
 
             try:
-                invoice_sub_dirs = get_sub_dirs(
-                    client, prefix=f"{company_id}/{RAW_DOCS_UNPROCESSED_INVOICE_PATH}"
+                invoice_sub_dirs = await get_sub_dirs(
+                    prefix=f"{company_id}/{RAW_DOCS_UNPROCESSED_INVOICE_PATH}"
                 )
                 num_files_left = len(
                     [
@@ -119,6 +119,9 @@ async def listen_to_firestore_invoice_updates(
                         if re.search(r".pdf$", blob.name)
                     ]
                 )
+                print(num_files_left)
+                print(len(initial_docs.keys()))
+                print(len(current_docs.keys()))
             except FileNotFoundError:
                 num_files_left = 0
 
@@ -246,8 +249,7 @@ async def listen_to_firestore_contract_updates(
                 )
 
             try:
-                contract_sub_dirs = get_sub_dirs(
-                    client,
+                contract_sub_dirs = await get_sub_dirs(
                     prefix=f"{company_id}/projects/{project_id}/contracts/{RAW_DOCS_UNPROCESSED_INVOICE_PATH}",
                 )
 

@@ -17,7 +17,14 @@ from googleapiclient.errors import HttpError
 from google.cloud import storage
 from fastapi import HTTPException
 from PIL import Image
-
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    wait_exponential_jitter,
+    stop_after_attempt,
+    AsyncRetrying,
+    before_sleep_log,
+)
 
 from utils.io_utils import delete_document_hash_from_firestore
 from utils import storage_utils
@@ -28,7 +35,6 @@ from utils.database.firestore import (
 from config import CUSTOMER_DOCUMENT_BUCKET, PROJECT_NAME
 
 client = storage.Client(project=PROJECT_NAME)
-bucket = client.get_bucket(CUSTOMER_DOCUMENT_BUCKET)
 
 upload_contract_logger = logging.getLogger("error_logger")
 upload_contract_logger.setLevel(logging.DEBUG)
@@ -39,7 +45,6 @@ try:
         "/Users/mgrant/STAK/app/stak-backend/api/logs/upload_contract.log"
     )
 except Exception as e:
-    print(e)
     handler = logging.StreamHandler(sys.stdout)
 
 handler.setLevel(logging.DEBUG)
@@ -72,6 +77,68 @@ def get_google_drive_creds():
         print(f"Failed to obtain credentials: {e}")
         return False
     return creds
+
+
+async def upload_file_to_drive_with_retry(
+    service, file_metadata, media, initial: int = 5, jitter: int = 5
+):
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(3),  # Adjust as needed
+        wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+        before_sleep=before_sleep_log(upload_contract_logger, logging.DEBUG),
+    ):
+        try:
+            with attempt:
+                loop = asyncio.get_event_loop()
+                upload_func = partial(
+                    service.files().create,
+                    body=file_metadata,
+                    media_body=media,
+                    fields="id",
+                )
+                file = await loop.run_in_executor(None, upload_func)
+                return file.execute()
+        except Exception as e:
+            upload_contract_logger.exception(
+                f"An error occurred uploaded to google drive: {e}"
+            )
+
+
+async def convert_file_with_retry(service, file_id, initial: int = 5, jitter: int = 5):
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+        before_sleep=before_sleep_log(upload_contract_logger, logging.DEBUG),
+    ):
+        with attempt:
+            loop = asyncio.get_event_loop()
+            request = service.files().export_media(
+                fileId=file_id, mimeType="application/pdf"
+            )
+            fh = io.BytesIO()
+            downloader = MediaIoBaseDownload(fh, request)
+            done = False
+            while not done:
+                _, done = await loop.run_in_executor(None, downloader.next_chunk)
+            return fh.getvalue()
+
+
+async def delete_file_with_retry(service, file_id, initial: int = 5, jitter: int = 5):
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+        retry=retry_if_exception_type(Exception),
+        reraise=True,
+        before_sleep=before_sleep_log(upload_contract_logger, logging.DEBUG),
+    ):
+        with attempt:
+            loop = asyncio.get_event_loop()
+            delete_func = partial(service.files().delete, fileId=file_id)
+            await loop.run_in_executor(None, delete_func)
 
 
 async def convert_word_to_pdf(
@@ -120,10 +187,8 @@ async def convert_word_to_pdf(
                 mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 resumable=True,
             )
-        file = (
-            service.files()
-            .create(body=file_metadata, media_body=media, fields="id")
-            .execute()
+        file = await upload_file_to_drive_with_retry(
+            service, file_metadata=file_metadata, media=media
         )
         file_id = file.get("id")
     except HttpError as error:
@@ -136,18 +201,10 @@ async def convert_word_to_pdf(
     # Try to convert the .docx file into a PDF file
     if file_id is not None:
         try:
-            request = service.files().export_media(
-                fileId=file_id, mimeType="application/pdf"
-            )
-            fh = io.BytesIO()
-            downloader = MediaIoBaseDownload(fh, request)
-            done = False
-            while done is False:
-                _, done = downloader.next_chunk()
-
+            pdf_content = await convert_file_with_retry(service, file_id=file_id)
             # Write the PDF file to disk
             with open(output_file_name, "wb") as f:
-                f.write(fh.getvalue())
+                f.write(pdf_content)
         except HttpError as error:
             upload_contract_logger.error(f"An HTTP error occured: {error}")
         except Exception as e:
@@ -155,14 +212,17 @@ async def convert_word_to_pdf(
 
         # Delete the .docx file from Google Drive
         try:
-            service.files().delete(fileId=file_id).execute()
+            _ = await delete_file_with_retry(service, file_id=file_id)
         except HttpError as error:
             upload_contract_logger.error(f"An HTTP error occured: {error}")
         except Exception as e:
             upload_contract_logger.exception(f"Failed to delete file: {e}")
 
+    bucket = await storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
     blob = bucket.blob(f"{bucket_prefix}/{filename}")
-    blob.upload_from_filename(out_file.name + ".pdf", content_type="application/pdf")
+    await storage_utils.upload_blob_from_file_retry(
+        blob, out_file.name + ".pdf", "application/pdf"
+    )
     # return True
 
 
@@ -193,7 +253,7 @@ async def delete_contracts_wrapper(data: List[str], company_id: str, project_id:
 async def delete_contracts_from_storage(
     company_id: str, project_id: str, data: List[str]
 ):
-    bucket = client.get_bucket(CUSTOMER_DOCUMENT_BUCKET)
+    bucket = await storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
     blobs_to_delete = [
         x.name
         for x in client.list_blobs(
@@ -258,8 +318,6 @@ async def save_contract_img(
     write_img_func = partial(image.save, temp_filename, format="JPEG", quality=10)
     await loop.run_in_executor(None, write_img_func)
 
-    bucket = storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
+    bucket = await storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
     blob = bucket.blob(f"{destination_prefix}/{destination_filename}")
-
-    upload_func = partial(blob.upload_from_filename, temp_filename)
-    await loop.run_in_executor(None, upload_func)
+    await storage_utils.upload_blob_from_file_retry(blob, temp_filename)

@@ -213,3 +213,9 @@ async def run_async_coroutine(coroutine):
         result = loop.run_until_complete(coroutine)
         loop.close()
         return result
+
+
+def chunk_list(data, chunk_size):
+    """Yield successive chunk_size chunks from data."""
+    for i in range(0, len(data), chunk_size):
+        yield data[i : i + chunk_size]

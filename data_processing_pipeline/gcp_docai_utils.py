@@ -53,9 +53,7 @@ async def batch_process_invoices(
     project_id: str | None = None,
     is_async: bool = True,
 ):
-    storage_client = storage.Client()
-    sub_dirs = get_sub_dirs(
-        storage_client,
+    sub_dirs = await get_sub_dirs(
         prefix=f"{company_id}/{globals_io.RAW_DOCS_UNPROCESSED_INVOICE_PATH}",
     )
     fs = gcsfs.GCSFileSystem()
@@ -128,9 +126,7 @@ async def batch_process_contracts(
     bucket_name: str,
     is_async: bool = True,
 ):
-    storage_client = storage.Client()
-    sub_dirs = get_sub_dirs(
-        storage_client,
+    sub_dirs = await get_sub_dirs(
         prefix=f"{company_id}/projects/{project_id}/contracts/raw-documents/unprocessed",
     )
     fs = gcsfs.GCSFileSystem()

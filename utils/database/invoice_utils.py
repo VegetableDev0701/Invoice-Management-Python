@@ -21,10 +21,16 @@ from utils.database.firestore import (
     delete_collections_from_firestore,
     push_update_to_firestore,
 )
-from utils.io_utils import delete_document_hash_from_firestore
+from utils.io_utils import chunk_list, delete_document_hash_from_firestore
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 from config import PROJECT_NAME, CUSTOMER_DOCUMENT_BUCKET
-from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
+from global_vars.globals_io import (
+    FIRESTORE_QUERY_BATCH_SIZE,
+    INITIAL,
+    JITTER,
+    RETRY_TIMES,
+)
+from utils.storage_utils import get_storage_bucket
 
 logger_invoices = logging.getLogger("error_logger")
 logger_invoices.setLevel(logging.DEBUG)
@@ -47,7 +53,6 @@ handler.setFormatter(formatter)
 logger_invoices.addHandler(handler)
 
 client = storage.Client(project=PROJECT_NAME)
-bucket = client.get_bucket(CUSTOMER_DOCUMENT_BUCKET)
 
 
 async def delete_invoice_wrapper(company_id: str, data: List[str]) -> None:
@@ -92,8 +97,7 @@ async def delete_invoices_from_storage(company_id: str, data: List[str]) -> None
         company_id: str
         data: List of invoice ids to delete
     """
-
-    bucket = client.get_bucket(CUSTOMER_DOCUMENT_BUCKET)
+    bucket = await get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
     blobs_to_delete = [
         x.name
         for x in client.list_blobs(CUSTOMER_DOCUMENT_BUCKET, prefix=company_id)
@@ -152,19 +156,25 @@ async def update_invoice_processed_data(
             before_sleep=before_sleep_log(logger_invoices, logging.DEBUG),
         ):
             with attempt:
-                invoice_ref = (
-                    db.collection(company_id)
-                    .document(document_name)
-                    .collection(collection_name)
-                    .where("__name__", "in", invoice_ids)
-                )
-            tasks = []
-            async for doc in invoice_ref.stream():
-                coroutine = doc.reference.update(
-                    {"processedData": update_processed_data[doc.id]["processedData"]}
-                )
-                tasks.append(asyncio.create_task(coroutine))
-            await asyncio.gather(*tasks)
+                for chunk in chunk_list(invoice_ids, FIRESTORE_QUERY_BATCH_SIZE):
+                    invoice_ref = (
+                        db.collection(company_id)
+                        .document(document_name)
+                        .collection(collection_name)
+                        .where("__name__", "in", chunk)
+                    )
+
+                    tasks = []
+                    async for doc in invoice_ref.stream():
+                        coroutine = doc.reference.update(
+                            {
+                                "processedData": update_processed_data[doc.id][
+                                    "processedData"
+                                ]
+                            }
+                        )
+                        tasks.append(asyncio.create_task(coroutine))
+                    await asyncio.gather(*tasks)
 
     except RetryError as e:
         logger_invoices.error(f"{e} occured while trying to update processedData. ")

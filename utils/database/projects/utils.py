@@ -18,9 +18,15 @@ from utils.data_models.projects import AddClientBillData
 from utils.data_models.budgets import UpdateCostCode
 from utils.data_models.charts import BaseReportDataItem
 from utils.database.firestore import stream_entire_collection
+from utils.io_utils import chunk_list
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
 from global_vars.globals_invoice import PROJECT_DETAILS_MATCHING_KEYS
-from global_vars.globals_io import INITIAL, JITTER, RETRY_TIMES
+from global_vars.globals_io import (
+    FIRESTORE_QUERY_BATCH_SIZE,
+    INITIAL,
+    JITTER,
+    RETRY_TIMES,
+)
 from config import PROJECT_NAME
 
 # Create a logger
@@ -434,7 +440,7 @@ async def add_new_client_bill(
         RetryError: If an error occurs while copying the invoices or labor documents to the client bill collection and the number of retry attempts exceeds the limit set by AsyncRetrying.
     """
     db = firestore.AsyncClient(project=project_name)
-    tasks = []
+
     try:
         invoice_ids = data.invoiceIds
         labor_ids = data.laborIds
@@ -465,21 +471,22 @@ async def add_new_client_bill(
             .collection(project_id)
             .document("client-bills-summary")
         )
+        tasks = []
         # move all invoices
         if len(invoice_ids) > 0:
-            async for doc in invoice_source_ref.where(
-                "__name__", "in", invoice_ids
-            ).stream():
-                invoice_doc = await client_bill_ref.document("invoices").get()
-                await copy_doc_to_db(
-                    destination_snapshot=invoice_doc,
-                    destination_ref=client_bill_ref,
-                    source_ref=invoice_source_ref,
-                    destination_document="invoices",
-                    doc_id=doc.id,
-                    doc=doc.to_dict(),
-                )
-                # tasks.append(asyncio.create_task(coroutine_inv))
+            for chunk in chunk_list(invoice_ids, FIRESTORE_QUERY_BATCH_SIZE):
+                async for doc in invoice_source_ref.where(
+                    "__name__", "in", chunk
+                ).stream():
+                    invoice_doc = await client_bill_ref.document("invoices").get()
+                    await copy_doc_to_db(
+                        destination_snapshot=invoice_doc,
+                        destination_ref=client_bill_ref,
+                        source_ref=invoice_source_ref,
+                        destination_document="invoices",
+                        doc_id=doc.id,
+                        doc=doc.to_dict(),
+                    )
 
         async for doc in project_ref.where(
             "__name__", "in", ["labor", "labor-summary"]
@@ -487,52 +494,58 @@ async def add_new_client_bill(
             for labor_id, labor_doc in doc.to_dict().items():
                 if labor_id in labor_ids:
                     if doc.id == "labor":
+                        labor_details_doc = await client_bill_ref.document(
+                            "labor"
+                        ).get()
                         await copy_doc_to_db(
-                            destination_snapshot=await client_bill_ref.document(
-                                "labor"
-                            ).get(),
+                            destination_snapshot=labor_details_doc,
                             destination_ref=client_bill_ref,
                             source_ref=project_ref.document("labor"),
                             destination_document="labor",
                             doc_id=labor_id,
                             doc=labor_doc,
                         )
-                        # tasks.append(asyncio.create_task(coroutine_labor))
                     else:
+                        labor_summary_doc = await client_bill_ref.document(
+                            "labor-summary"
+                        ).get()
                         await copy_doc_to_db(
-                            destination_snapshot=await client_bill_ref.document(
-                                "labor-summary"
-                            ).get(),
+                            destination_snapshot=labor_summary_doc,
                             destination_ref=client_bill_ref,
                             source_ref=project_ref.document("labor-summary"),
                             destination_document="labor-summary",
                             doc_id=labor_id,
                             doc=labor_doc,
                         )
-                        # tasks.append(asyncio.create_task(coroutine_labor_summary))
-        coroutine_bill_summary = copy_doc_to_db(
-            destination_snapshot=await client_bill_summary_ref.get(),
-            destination_ref=client_bill_summary_ref,
-            source_ref=None,
-            destination_document=None,
-            doc_id=client_bill_id,
-            doc=bill_summary.dict(),
-        )
-        tasks.append(asyncio.create_task(coroutine_bill_summary))
 
-        coroutine_bill_work_description = copy_doc_to_db(
-            destination_snapshot=await client_bill_ref.document(
-                "bill-work-description"
-            ).get(),
-            destination_ref=client_bill_ref,
-            source_ref=None,
-            destination_document="bill-work-description",
-            doc_id=None,
-            doc=bill_work_description.dict(),
+        client_bill_summary_doc = await client_bill_summary_ref.get()
+        tasks.append(
+            asyncio.create_task(
+                copy_doc_to_db(
+                    destination_snapshot=client_bill_summary_doc,
+                    destination_ref=client_bill_summary_ref,
+                    source_ref=None,
+                    destination_document=None,
+                    doc_id=client_bill_id,
+                    doc=bill_summary.dict(),
+                )
+            )
         )
-        tasks.append(asyncio.create_task(coroutine_bill_work_description))
+        client_bill_doc = await client_bill_ref.document("bill-work-description").get()
+        tasks.append(
+            asyncio.create_task(
+                copy_doc_to_db(
+                    destination_snapshot=client_bill_doc,
+                    destination_ref=client_bill_ref,
+                    source_ref=None,
+                    destination_document="bill-work-description",
+                    doc_id=None,
+                    doc=bill_work_description.dict(),
+                )
+            )
+        )
 
-        await asyncio.gather(*tasks)
+        _ = await asyncio.gather(*tasks)
     except Exception as e:
         logger_project_utils.exception(f"Error adding new client bill: {e}")
         return {"message": "Error adding new client bill."}

@@ -92,7 +92,7 @@ async def process_batch_process(
 
             operation.add_done_callback(my_callback)
         except Exception as e:
-            print(traceback.format_exc())
+            traceback.format_exc()
 
         # Once the operation is complete,
         # get output document information from operation metadata

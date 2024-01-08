@@ -654,7 +654,7 @@ async def traverse_all_docs_and_match_empty_vendors(
 
     except Exception as e:
         print(e)
-        print(traceback.print_exc())
+        traceback.print_exc()
 
     finally:
         db.close()

@@ -38,7 +38,7 @@ async def get_client_bill(
     client_bill_id: str,
     is_only_current_actuals: str,
     current_user=Depends(auth.get_current_user),
-) -> str:
+) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
     if is_only_current_actuals == "true":
@@ -48,7 +48,7 @@ async def get_client_bill(
             project_id=project_id,
             client_bill_id=client_bill_id,
         )
-        return json.dumps(current_actuals)
+        return current_actuals
     else:
         client_bill = await get_client_bill_from_firestore(
             project_name=PROJECT_NAME,
@@ -56,7 +56,7 @@ async def get_client_bill(
             project_id=project_id,
             client_bill_id=client_bill_id,
         )
-    return json.dumps(client_bill)
+    return client_bill
 
 
 @router.post("/{company_id}/update-client-bill")

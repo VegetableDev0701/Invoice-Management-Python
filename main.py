@@ -23,7 +23,7 @@ from routers import (
     websocket,
     agave,
     onboard_new_user_router,
-    employees_customers
+    employees_customers,
 
 )
 from routers.projects import (
@@ -41,7 +41,7 @@ TESTING = False
 
 app = FastAPI()
 
-dir_path = os.path.join('static')
+dir_path = os.path.join("static")
 
 # Check if the directory exists
 if not os.path.exists(dir_path):
@@ -49,6 +49,7 @@ if not os.path.exists(dir_path):
     os.makedirs(dir_path)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -112,7 +113,7 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000)),
-        log_level="info",
+        log_level="debug",
         reload=True,
         access_log=False,
     )

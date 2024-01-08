@@ -4,9 +4,9 @@ from pydantic import BaseModel
 
 # Cost Codes
 class SubItems(BaseModel):
-    agave_uuid: str
+    agave_uuid: str | None = None
     name: str
-    number: str
+    number: str | None
     id: str
     inputType: str
     isCurrency: bool
@@ -17,9 +17,9 @@ class SubItems(BaseModel):
 
 
 class Divisions(BaseModel):
-    agave_uuid: str
+    agave_uuid: str | None = None
     name: str
-    number: str
+    number: str | None
     subItems: List[SubItems]
 
 

@@ -13,10 +13,16 @@ from tenacity import (
     RetryError,
     before_sleep_log,
 )
+from utils.io_utils import chunk_list
 from utils.retry_utils import RETRYABLE_EXCEPTIONS
-
 from global_vars.globals_invoice import PROJECT_DETAILS_MATCHING_KEYS
-from global_vars.globals_io import BATCH_SIZE_CUTOFF, INITIAL, JITTER, RETRY_TIMES
+from global_vars.globals_io import (
+    BATCH_SIZE_CUTOFF,
+    FIRESTORE_QUERY_BATCH_SIZE,
+    INITIAL,
+    JITTER,
+    RETRY_TIMES,
+)
 
 # Create a logger
 firestore_io_logger = logging.getLogger("error_logger")
@@ -28,7 +34,6 @@ try:
         "/Users/mgrant/STAK/app/stak-backend/api/logs/firestore_read_write_error_logs.log"
     )
 except Exception as e:
-    print(e)
     handler = logging.StreamHandler(sys.stdout)
 
 handler.setLevel(logging.DEBUG)
@@ -51,7 +56,6 @@ async def get_from_firestore(
     doc_collection_doc_collection_document: str | None = None,
     initial: int = INITIAL,
     jitter: int = JITTER,
-
 ):
     db = firestore.AsyncClient(project=project_name)
     try:
@@ -177,7 +181,6 @@ async def fetch_project_if_active(
 async def fetch_all_active_projects(
     company_id: str, project_name: str, initial: int = INITIAL, jitter: int = JITTER
 ):
-
     db = firestore.AsyncClient(project=project_name)
     try:
         async for attempt in AsyncRetrying(
@@ -423,7 +426,6 @@ async def push_to_firestore(
                     document_ref = document_ref.collection(doc_collection).document(
                         doc_collection_document
                     )
-
                 if path_to_json:
                     with open(path_to_json, "r") as file:
                         firestore_data = json.load(file)
@@ -441,6 +443,132 @@ async def push_to_firestore(
         )
         raise
 
+    except Exception as e:
+        firestore_io_logger.exception(f"An error occurred getting data: {e}")
+    finally:
+        db.close()
+
+
+async def push_to_firestore_batch(
+    project_name: str,
+    collection: str,
+    documents: List[Dict],
+    initial: int = 10,
+    jitter: int = 5,
+):
+    db = firestore.AsyncClient(project=project_name)
+    count = 0
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(RETRY_TIMES),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+            retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+            reraise=True,
+            before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
+        ):
+            with attempt:
+                batch = db.batch()
+                for doc_data in documents:
+                    doc_ref = db.collection(collection).document(doc_data["document"])
+                    if (
+                        "doc_collection" in doc_data
+                        and "doc_collection_document" in doc_data
+                    ):
+                        doc_ref = doc_ref.collection(
+                            doc_data["doc_collection"]
+                        ).document(doc_data["doc_collection_document"])
+                    batch.set(doc_ref, doc_data["data"])
+                    count += 1
+                    if count % 500 == 0:
+                        await batch.commit()
+                        batch = db.batch()
+                await batch.commit()
+
+    except RetryError as e:
+        firestore_io_logger.error(
+            f"RETRYERROR: {e} occurred while trying to write to Firestore"
+        )
+        raise
+
+    except Exception as e:
+        firestore_io_logger.exception(f"An error occurred writing to Firestore: {e}")
+    finally:
+        db.close()
+
+
+async def push_qbd_items_data_to_firestore(
+    project_name: str, collection: str, document: str, items_data: dict
+):
+    db = firestore.AsyncClient(project=project_name)
+    try:
+        tasks = []
+        ref = (
+            db.collection(collection)
+            .document(document)
+            .collection("items")
+            .document("items")
+        )
+        for url, status, data in items_data:
+            if status != 200:
+                continue
+            typ = url.split("type=")[-1]
+            type_ref = ref.collection(typ)
+
+            # batching
+            if len(data["data"]) > BATCH_SIZE_CUTOFF:
+                batch = db.batch()
+                count = 0
+                for item in data["data"]:
+                    doc_ref = type_ref.document(item["id"])
+                    batch.set(doc_ref, item)
+                    count += 1
+                    if count % 500 == 0:
+                        await batch.commit()
+                        batch = db.batch()
+                await batch.commit()
+            # not batching
+            else:
+                for item in data["data"]:
+                    doc_ref = type_ref.document(item["id"])
+                    tasks.append(asyncio.create_task(doc_ref.set(item)))
+                _ = await asyncio.gather(*tasks)
+
+    except Exception as e:
+        firestore_io_logger.exception(
+            f"An error occurred saving QBD items to Firestore: {e}"
+        )
+    finally:
+        db.close()
+
+
+async def safe_set(doc_ref, item):
+    try:
+        await doc_ref.set(item)
+    except Exception as e:
+        firestore_io_logger.error(f"Error writing document {doc_ref.id}: {e}")
+        # Handle or log the error for this specific document
+
+
+async def push_qbd_data_to_firestore_batched(
+    project_name: str,
+    collection: str,
+    document: str,
+    doc_collection: str,
+    data: dict,
+):
+    db = firestore.AsyncClient(project=project_name)
+    batch = db.batch()
+    count = 0
+    try:
+        ref = db.collection(collection).document(document).collection(doc_collection)
+        for item in data["data"]:
+            doc_ref = ref.document(item["id"])
+            batch.set(doc_ref, item)
+            count += 1
+            if count % 500 == 0:
+                await batch.commit()
+                batch = db.batch()
+        await batch.commit()
     except Exception as e:
         firestore_io_logger.exception(f"An error occurred getting data: {e}")
     finally:
@@ -786,16 +914,19 @@ async def delete_project_items_from_firestore(
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
         ):
             with attempt:
-                project_ref = (
-                    db.collection(company_id)
-                    .document(document_name)
-                    .collection(project_key)
-                    .where("__name__", "in", doc_collection_names)
-                )
+                for chunk in chunk_list(
+                    doc_collection_names, FIRESTORE_QUERY_BATCH_SIZE
+                ):
+                    project_ref = (
+                        db.collection(company_id)
+                        .document(document_name)
+                        .collection(project_key)
+                        .where("__name__", "in", chunk)
+                    )
 
-                async for doc in project_ref.stream():
-                    for id in ids:
-                        await doc.reference.update({id: firestore.DELETE_FIELD})
+                    async for doc in project_ref.stream():
+                        for id in ids:
+                            await doc.reference.update({id: firestore.DELETE_FIELD})
 
     except RetryError as e:
         firestore_io_logger.error(f"{e} occured while trying to delete project items")
@@ -928,42 +1059,45 @@ async def remove_change_order_id_from_invoices_in_firestore(
             before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
         ):
             with attempt:
-                invoice_doc_ref = (
-                    db.collection(company_id)
-                    .document(document_name)
-                    .collection(collection_name)
-                    .where("__name__", "in", invoice_ids)
-                )
-                async for doc in invoice_doc_ref.stream():
-                    processed_data = doc.to_dict()["processedData"]
+                for chunk in chunk_list(invoice_ids, FIRESTORE_QUERY_BATCH_SIZE):
+                    invoice_doc_ref = (
+                        db.collection(company_id)
+                        .document(document_name)
+                        .collection(collection_name)
+                        .where("__name__", "in", chunk)
+                    )
+                    async for doc in invoice_doc_ref.stream():
+                        processed_data = doc.to_dict()["processedData"]
 
-                    # if there are line items, have to search for the invoice there to remove it
-                    # if no invoice is found, the dict will not change
-                    update_line_items = {}
-                    if processed_data["line_items"]:
-                        for item_num, item in processed_data["line_items"].items():
-                            if (
-                                item["change_order"]
-                                and item["change_order"]["uuid"] == change_order_id
-                            ):
-                                item["change_order"] = None
-                                # item["bounding_box"] = None
-                                update_line_items.update({item_num: item})
-                            else:
-                                update_line_items.update({item_num: item})
-                        processed_data.update(
-                            {
-                                "change_order": None,
-                                # "remove_from_change_order": None,
-                                "line_items": update_line_items,
-                            }
-                        )
-                        await doc.reference.update({"processedData": processed_data})
-                    # if there are no line items, then we must have a change order for whole invoice
-                    else:
-                        await doc.reference.update(
-                            {"change_order": None, "processedData": processed_data}
-                        )
+                        # if there are line items, have to search for the invoice there to remove it
+                        # if no invoice is found, the dict will not change
+                        update_line_items = {}
+                        if processed_data["line_items"]:
+                            for item_num, item in processed_data["line_items"].items():
+                                if (
+                                    item["change_order"]
+                                    and item["change_order"]["uuid"] == change_order_id
+                                ):
+                                    item["change_order"] = None
+                                    # item["bounding_box"] = None
+                                    update_line_items.update({item_num: item})
+                                else:
+                                    update_line_items.update({item_num: item})
+                            processed_data.update(
+                                {
+                                    "change_order": None,
+                                    # "remove_from_change_order": None,
+                                    "line_items": update_line_items,
+                                }
+                            )
+                            await doc.reference.update(
+                                {"processedData": processed_data}
+                            )
+                        # if there are no line items, then we must have a change order for whole invoice
+                        else:
+                            await doc.reference.update(
+                                {"change_order": None, "processedData": processed_data}
+                            )
 
     except RetryError as e:
         firestore_io_logger.error(

@@ -85,7 +85,7 @@ class ChangeOrderChartDataV2(BaseModel):
 
 
 class CostCodeB2ADataV2(BaseModel):
-    number: str
+    number: str | None
     name: Optional[str] = None
     value: Optional[str] = None
     actual: Optional[str] = None

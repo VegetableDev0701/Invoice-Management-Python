@@ -14,13 +14,15 @@ client = TestClient(app)
     ],
 )
 def test_generate_signed_url(company_id, doc_id, filenames, mock_auth):
-    # Mock Blob
+    mock_bucket = Mock()
     mock_blob = Mock()
     mock_blob.generate_signed_url.return_value = "mock_signed_url"
+    mock_bucket.get_bloc.return_balue = mock_blob
 
-    with patch("routers.invoices.bucket.get_blob", return_value=mock_blob), patch(
-        "utils.auth.check_user_data"
-    ):
+    with patch("utils.auth.check_user_data") as mock_auth, patch(
+        "utils.storage_utils.get_storage_bucket", return_value=mock_bucket
+    ), patch("utils.storage_utils.get_signed_url", return_value="mock_signed_url"):
+        mock_auth.return_value = Mock()
         headers = {"auth0": "Bearer mock_token"}
         response = client.get(
             f"/{company_id}/invoice/generate-signed-url",

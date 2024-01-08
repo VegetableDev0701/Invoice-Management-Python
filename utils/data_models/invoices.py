@@ -3,6 +3,7 @@ from pydantic import BaseModel, Extra
 
 from utils.data_models.base import NameWithId
 
+
 # Update Project in Invoices
 class Project(BaseModel):
     name: str | None
@@ -49,21 +50,21 @@ class LineItemObject(BaseModel):
 
 
 class ProcessedInvoiceDataItem(BaseModel):
-    is_credit: bool | None = None
     approver: str | None = None
-    total_tax_amount: str | None = None
-    line_items: Dict[str, LineItems] | None = None
-    vendor: NameWithId
+    billable: bool
     change_order: NameWithId | None
     cost_code: str | None = None
+    date_received: str | None = None
+    invoice_date: str | None = None
+    invoice_id: str | None = None
+    is_credit: bool
+    is_credit: bool | None = None
+    is_synced: str | None = None
+    line_items: Dict[str, LineItems] | None = None
     line_items_toggle: bool | None = None
     total_amount: str | None = None
-    invoice_id: str | None = None
-    date_received: str | None = None
-    is_synced: str | None = None
-    invoice_date: str | None = None
-    is_credit: bool
-    billable: bool
+    total_tax_amount: str | None = None
+    vendor: NameWithId
 
 
 class ProcessedInvoiceData(BaseModel):
@@ -104,7 +105,7 @@ class Entity(BaseModel):
 
 class InvoiceLineItemItem(BaseModel):
     description: str | None = None
-    amount: str
+    amount: str | None
     cost_code: str | None = None
     work_description: str | None = None
     page: int | None = None

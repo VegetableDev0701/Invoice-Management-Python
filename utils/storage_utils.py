@@ -1,20 +1,62 @@
 import asyncio
 from functools import partial
 import json
+import logging
 import pathlib
 import re
 import os
 import shutil
+import sys
 import tempfile
 
 import cv2
 import gcsfs
 from google.cloud import storage
 import numpy as np
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    wait_exponential,
+    wait_exponential_jitter,
+    stop_after_attempt,
+    AsyncRetrying,
+    before_sleep_log,
+)
 
 from utils.database.firestore import push_to_firestore
 from config import PROJECT_NAME
-from global_vars import globals_io
+from global_vars.globals_io import (
+    RAW_DOCS_PROCESSED_CONTRACTS_PATH,
+    RAW_DOCS_PROCESSED_INVOICE_PATH,
+    RAW_DOCS_UNPROCESSED_CONTRACTS_PATH,
+    RAW_DOCS_UNPROCESSED_INVOICE_PATH,
+    RETRY_TIMES,
+    STAK_BASE_FORM_BUCKET,
+    STAK_COMPANY_FILES_BUCKET,
+    STAK_CUSTOMER_DOCUMENTS_BUCKET,
+)
+
+
+# Create a logger
+storage_utils_logger = logging.getLogger("error_logger")
+storage_utils_logger.setLevel(logging.DEBUG)
+
+try:
+    # Create a file handler
+    handler = logging.FileHandler(
+        "/Users/mgrant/STAK/app/stak-backend/api/logs/storage_utils.log"
+    )
+except:
+    handler = logging.StreamHandler(sys.stdout)
+
+handler.setLevel(logging.DEBUG)
+
+# Create a logging format
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+handler.setFormatter(formatter)
+
+# Add the handlers to the logger
+storage_utils_logger.addHandler(handler)
 
 
 def move_blob(
@@ -101,19 +143,18 @@ async def save_updated_cost_codes_to_gcs(company_id: str, data: dict, bucket: st
     """
     Saves data to a location in GCS.
     """
-    bucket = get_storage_bucket(bucket)
+    bucket = await get_storage_bucket(bucket)
     file_name = f"{company_id}/cost-codes.json"
 
     blob = bucket.blob(file_name)
-    blob.upload_from_string(data=json.dumps(data), content_type="application/json")
+    await upload_blob_from_str_retry(blob, data)
 
 
-def get_sub_dirs(
-    storage_client: storage.Client,
+async def get_sub_dirs(
     prefix: str | None = None,
-    bucket_name: str = "stak-customer-documents",
+    bucket_name: str = STAK_CUSTOMER_DOCUMENTS_BUCKET,
 ) -> set:
-    bucket = storage_client.get_bucket(bucket_name)
+    bucket = await get_storage_bucket(bucket_name)
     blobs = [blob for blob in bucket.list_blobs(prefix=prefix)]
     return set([x.name.split("/")[-2] for x in blobs])
 
@@ -139,13 +180,13 @@ def get_all_invoice_filenames(
     unprocessed_files_list = [
         re.sub(r"::[^:]*::", "", x.name).split("/")[-1]
         for x in bucket_obj.list_blobs(
-            prefix=f"{company_id}/{globals_io.RAW_DOCS_UNPROCESSED_INVOICE_PATH}/"
+            prefix=f"{company_id}/{RAW_DOCS_UNPROCESSED_INVOICE_PATH}/"
         )
     ]
     processed_files_list = [
         re.sub(r"::[^:]*::", "", x.name).split("/")[-1]
         for x in bucket_obj.list_blobs(
-            prefix=f"{company_id}/{globals_io.RAW_DOCS_PROCESSED_INVOICE_PATH}/"
+            prefix=f"{company_id}/{RAW_DOCS_PROCESSED_INVOICE_PATH}/"
         )
     ]
 
@@ -175,20 +216,22 @@ def get_all_contract_filenames(
     unprocessed_files_list = [
         os.path.splitext(re.sub(r"::[^:]*::", "", x.name).split("/")[-1])[0]
         for x in bucket_obj.list_blobs(
-            prefix=f"{company_id}/projects/{project_id}/{globals_io.RAW_DOCS_UNPROCESSED_CONTRACTS_PATH}"
+            prefix=f"{company_id}/projects/{project_id}/{RAW_DOCS_UNPROCESSED_CONTRACTS_PATH}"
         )
     ]
     processed_files_list = [
         os.path.splitext(re.sub(r"::[^:]*::", "", x.name).split("/")[-1])[0]
         for x in bucket_obj.list_blobs(
-            prefix=f"{company_id}/projects/{project_id}/{globals_io.RAW_DOCS_PROCESSED_CONTRACTS_PATH}"
+            prefix=f"{company_id}/projects/{project_id}/{RAW_DOCS_PROCESSED_CONTRACTS_PATH}"
         )
     ]
 
     return [*unprocessed_files_list, *processed_files_list]
 
 
-def get_storage_bucket(bucket: str) -> storage.Client():
+async def get_storage_bucket(
+    bucket: str, initial: int = 5, jitter: int = 5
+) -> storage.Client():
     """
     Return a bucket object
 
@@ -203,7 +246,96 @@ def get_storage_bucket(bucket: str) -> storage.Client():
     """
 
     storage_client = storage.Client()
-    return storage_client.get_bucket(bucket)
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(RETRY_TIMES),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+            retry=retry_if_exception_type(Exception),
+            reraise=True,
+            before_sleep=before_sleep_log(storage_utils_logger, logging.DEBUG),
+        ):
+            with attempt:
+                return storage_client.get_bucket(bucket)
+
+    except Exception as e:
+        storage_utils_logger.exception(f"An error occurred getting data: {e}")
+
+
+async def upload_blob_from_file_retry(
+    blob, file_path, content_type: str | None = None, initial: int = 5, jitter: int = 5
+) -> None:
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(RETRY_TIMES),  # Retry up to 3 times
+        wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+        retry=retry_if_exception_type(Exception),  # Retry on all exceptions
+        reraise=True,
+        before_sleep=before_sleep_log(storage_utils_logger, logging.DEBUG),
+    ):
+        try:
+            with attempt:
+                loop = asyncio.get_event_loop()
+                upload_func = partial(
+                    blob.upload_from_filename, file_path, content_type=content_type
+                )
+                await loop.run_in_executor(None, upload_func)
+        except Exception as e:
+            storage_utils_logger.exception(f"An error occurred uploading blob: {e}")
+
+
+async def upload_blob_from_str_retry(
+    blob, data: dict, initial: int = 5, jitter: int = 5
+) -> None:
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(RETRY_TIMES),  # Retry up to 3 times
+        wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+        retry=retry_if_exception_type(Exception),  # Retry on all exceptions
+        reraise=True,
+        before_sleep=before_sleep_log(storage_utils_logger, logging.DEBUG),
+    ):
+        try:
+            with attempt:
+                loop = asyncio.get_event_loop()
+                upload_func = partial(
+                    blob.upload_from_string,
+                    json.dumps(data),
+                    content_type="application/json",
+                )
+                await loop.run_in_executor(None, upload_func)
+        except Exception as e:
+            storage_utils_logger.exception(f"An error occurred uploading blob: {e}")
+
+
+async def download_blob_with_retry(
+    blob, file_path: str, initial: int = 5, jitter: int = 5
+) -> None:
+    async for attempt in AsyncRetrying(
+        stop=stop_after_attempt(RETRY_TIMES),  # Retry up to 3 times
+        wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+        retry=retry_if_exception_type(Exception),  # Retry on all exceptions
+        reraise=True,
+        before_sleep=before_sleep_log(storage_utils_logger, logging.DEBUG),
+    ):
+        try:
+            with attempt:
+                loop = asyncio.get_event_loop()
+                download_func = partial(blob.download_to_filename, file_path)
+                await loop.run_in_executor(None, download_func)
+        except Exception as e:
+            storage_utils_logger.exception(f"An error occurred downloading blob: {e}")
+
+
+@retry(
+    stop=stop_after_attempt(RETRY_TIMES),  # Retry up to 3 times
+    wait=wait_exponential(multiplier=1, max=10),  # Exponential backoff
+    retry=retry_if_exception_type(Exception),  # Retry on all exceptions
+)
+def get_signed_url(blob, expiration, credentials):
+    return blob.generate_signed_url(
+        expiration=expiration,
+        version="v4",
+        service_account_email=credentials.service_account_email,
+        access_token=credentials.token,
+    )
 
 
 async def save_cv2_image(
@@ -216,7 +348,7 @@ async def save_cv2_image(
     hex_string: str
         The "byte string" in hex format from the database
     """
-    bucket = get_storage_bucket("stak-customer-documents")
+    bucket = await get_storage_bucket(STAK_CUSTOMER_DOCUMENTS_BUCKET)
     blob = bucket.blob(f"{destination_prefix}/{destination_filename}")
     imgarr = np.frombuffer(bytes.fromhex(hex_string), np.uint8)
     img_np = cv2.imdecode(imgarr, cv2.IMREAD_COLOR)
@@ -225,25 +357,18 @@ async def save_cv2_image(
         cv2.imwrite, temp_file, img_np, [cv2.IMWRITE_JPEG_QUALITY, 30]
     )
     await loop.run_in_executor(None, write_img_func)
-
-    upload_func = partial(blob.upload_from_filename, temp_file)
-    await loop.run_in_executor(None, upload_func)
+    await upload_blob_from_file_retry(blob, temp_file)
 
 
 async def save_doc_dict(doc_dict: dict, destination: str):
-    bucket = get_storage_bucket("stak-customer-documents")
+    bucket = await get_storage_bucket(STAK_CUSTOMER_DOCUMENTS_BUCKET)
     blob = bucket.blob(destination)
-
-    loop = asyncio.get_event_loop()
-    upload_func = partial(
-        blob.upload_from_string, json.dumps(doc_dict), content_type="application/json"
-    )
-    await loop.run_in_executor(None, upload_func)
+    await upload_blob_from_str_retry(blob, data=doc_dict)
 
 
 async def download_and_onboard_new_company_files(company_id: str) -> None:
-    base_form_bucket = get_storage_bucket("stak-base-form-data")
-    cost_code_bucket = get_storage_bucket("stak-company-files")
+    base_form_bucket = await get_storage_bucket(STAK_BASE_FORM_BUCKET)
+    cost_code_bucket = await get_storage_bucket(STAK_COMPANY_FILES_BUCKET)
 
     tasks = []
     base_form_blobs = base_form_bucket.list_blobs()
@@ -260,7 +385,7 @@ async def download_and_onboard_new_company_files(company_id: str) -> None:
         temp_file_path = pathlib.Path(temp_dir) / "temp.json"
 
         with open(temp_file_path, "wb") as temp_file:
-            blob.download_to_filename(temp_file.name)
+            await download_blob_with_retry(blob, temp_file.name)
             kwargs = base_kwargs.copy()
             name = blob.name.split("/")[-1].split(".")[0]
             kwargs.update(
@@ -282,7 +407,7 @@ async def download_and_onboard_new_company_files(company_id: str) -> None:
             temp_dir = tempfile.mkdtemp()  # Create a temporary directory
             temp_file_path = pathlib.Path(temp_dir) / "temp.json"
             with open(temp_file_path, "wb") as temp_file:
-                blob.download_to_filename(temp_file.name)
+                await download_blob_with_retry(blob, temp_file.name)
                 kwargs = base_kwargs.copy()
                 kwargs.update(
                     {"document": "cost-codes", "path_to_json": temp_file.name}

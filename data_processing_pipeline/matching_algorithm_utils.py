@@ -540,7 +540,7 @@ async def match_predicted_vendor(
     # Using dict.get() with a default value of an empty dict for "vendor"
     vendor_name = pred_vendor_name_dict.get(
         "supplier_name"
-    ) or pred_vendor_name_dict.get("vendor", {}).get("name")
+    ) or pred_vendor_name_dict.get("vendor")
     is_invoice = "supplier_name" in pred_vendor_name_dict
 
     if all_vendor_summary_list:

@@ -74,8 +74,6 @@ logger_invoices.addHandler(handler)
 
 credentials, project = google.auth.default(scopes=SCOPES)
 credentials.refresh(google.auth.transport.requests.Request())
-client = storage.Client(project=project, credentials=credentials)
-bucket = client.get_bucket(CUSTOMER_DOCUMENT_BUCKET)
 
 # define a background tasks dict in the global scope
 background_tasks_dict = {}
@@ -114,20 +112,16 @@ async def generate_signed_url(
     expiration_datetime = datetime.datetime.utcnow() + expiration
     expiration_timestamp = int(expiration_datetime.timestamp())
 
+    bucket = await storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
+
     signed_urls = []
     for filename in filenames:
         blob_path = f"{company_id}/processed-documents/{doc_id}/{filename}"
         blob = bucket.get_blob(blob_path)
 
         try:
-            signed_urls.append(
-                blob.generate_signed_url(
-                    expiration=expiration,
-                    version="v4",
-                    service_account_email=credentials.service_account_email,
-                    access_token=credentials.token,
-                )
-            )
+            signed_url = storage_utils.get_signed_url(blob, expiration, credentials)
+            signed_urls.append(signed_url)
         except Exception as e:
             print(e)
             return {"message": f"Error generating the signed url: {e}"}
@@ -157,7 +151,7 @@ async def create_files(
         dict: A dictionary containing a message indicating the files were successfully uploaded.
     """
     auth.check_user_data(company_id=company_id, current_user=current_user)
-    bucket = storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
+    bucket = await storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
 
     # Check for duplicate files
     current_uploads, repeats = await io_utils.calculate_file_hash(files)
@@ -169,13 +163,6 @@ async def create_files(
         company_id=company_id,
         document_name="documents",
     )
-
-    # TODO
-    # If having spaces in files becomes a problem will add this code back
-    # upload_filenames = [db_utils.format_filename(file.filename) for file in files]
-    # duplicates = io_validation.check_for_duplicates_by_filename(
-    #     prev_files, upload_filenames
-    # )
     duplicates_names = None
     if TESTING:
         pass
@@ -238,6 +225,7 @@ async def create_files(
                 document="documents",
             )
 
+    upload_tasks = []
     i = 0
     for invoice_id, file in files:
         if file.content_type != "application/pdf":
@@ -264,7 +252,11 @@ async def create_files(
             content = await file.read()
             await out_file.write(content)
             blob = bucket.blob(f"{bucket_prefix}/{filename}")
-            blob.upload_from_filename(out_file.name, content_type=file.content_type)
+            upload_task = storage_utils.upload_blob_from_file_retry(
+                blob, out_file.name, file.content_type
+            )
+            upload_tasks.append(upload_task)
+    _ = await asyncio.gather(*upload_tasks)
 
     # Begin processing all documents
     await push_update_to_firestore(

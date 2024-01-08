@@ -33,8 +33,6 @@ from global_vars.globals_io import (
 
 credentials, project = google.auth.default(scopes=SCOPES)
 credentials.refresh(google.auth.transport.requests.Request())
-client = storage.Client(project=project, credentials=credentials)
-bucket = client.get_bucket(CUSTOMER_DOCUMENT_BUCKET)
 
 router = APIRouter()
 
@@ -63,7 +61,7 @@ async def create_files(
         dict: A dictionary containing a message indicating the files were successfully uploaded.
     """
     auth.check_user_data(company_id=company_id, current_user=current_user)
-    bucket = storage_utils.get_storage_bucket("stak-customer-documents")
+    bucket = await storage_utils.get_storage_bucket("stak-customer-documents")
 
     # Check for duplicate files
     current_uploads, repeats = await io_utils.calculate_file_hash(files)
@@ -171,7 +169,9 @@ async def create_files(
                 content = await file.read()
                 await out_file.write(content)
                 blob = bucket.blob(f"{bucket_prefix}/{filename}")
-                blob.upload_from_filename(out_file.name, content_type=file.content_type)
+                await storage_utils.upload_blob_from_file_retry(
+                    blob, out_file.name, file.content_type
+                )
     _ = await asyncio.gather(*tasks)
 
     await push_update_to_firestore(
@@ -212,19 +212,15 @@ async def generate_signed_url(
     expiration_datetime = datetime.datetime.utcnow() + expiration
     expiration_timestamp = int(expiration_datetime.timestamp())
 
+    bucket = await storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
+
     signed_urls = []
     for filename in filenames:
         blob_path = f"{company_id}/projects/{project_id}/contracts/processed-documents/{contract_id}/{filename}"
         blob = bucket.get_blob(blob_path)
         try:
-            signed_urls.append(
-                blob.generate_signed_url(
-                    expiration=expiration,
-                    version="v4",
-                    service_account_email=credentials.service_account_email,
-                    access_token=credentials.token,
-                )
-            )
+            signed_url = storage_utils.get_signed_url(blob, expiration, credentials)
+            signed_urls.append(signed_url)
         except:
             return {"message": "Error generating the signed url."}
 

@@ -5,6 +5,9 @@ RECEIPT_PROCESSOR_ID = "5c1964f3784a983e"
 OCR_PROCESSOR_ID = "a181da6cfda5fe8e"  # ocr processor
 
 GCS_OUTPUT_BUCKET = "gs://stak-customer-documents"
+STAK_CUSTOMER_DOCUMENTS_BUCKET = "stak-customer-documents"
+STAK_BASE_FORM_BUCKET = "stak-base-form-data"
+STAK_COMPANY_FILES_BUCKET = "stak-company-files"
 
 RAW_DOCS_UNPROCESSED_INVOICE_PATH = "raw-documents/unprocessed"
 RAW_DOCS_PROCESSED_INVOICE_PATH = "raw-documents/processed"
@@ -20,6 +23,8 @@ MESSAGE_STREAM_DELAY = 1
 HEARTBEAT_INTERVAL = 5
 
 BATCH_SIZE_CUTOFF = 50
+FIRESTORE_QUERY_BATCH_SIZE = 30
+
 RETRY_TIMES = 3
 
 # needed for getting signed urls inside a google cloud run
@@ -58,4 +63,3 @@ QBD_VENDOR_EXT_NAMES_LOOKUP_KEY = "qbd_custom_vendor_ext_name_lookup"
 
 INITIAL = 5
 JITTER = 5
-
