@@ -113,24 +113,32 @@ class ClientBillData(BaseModel):
     actualsChangeOrders: InvoiceChangeOrderCurrentActuals
 
 
+class Payment(BaseModel):
+    total_due: str
+    paid_amount: str
+    status: str
+    date_payment: str
+    date_due: str
+
+
 class BillSummary(BaseModel):
     billTitle: str
-    changeOrders: str | None
-    subTotal: str
-    salesTax: str
-    profit: str
-    insuranceLiability: str
-    total: str
     boTax: str
+    changeOrders: str | None
+    createdAt: str | None
+    insuranceLiability: str
+    invoiceIds: List[str] | None
+    laborFeeIds: List[str] | None
     numInvoices: float
     numChangeOrders: float
-    # totalLaborFeesAmount: str
-    # totalSubInvoiceAmount: str
-    uuid: str
+    payment: Payment | None
+    profit: str
+    salesTax: str
+    salesTaxPercent: str
+    subTotal: str
+    total: str
     totalsByChangeOrder: Dict[str, float]
-    laborFeeIds: List[str] | None
-    invoiceIds: List[str] | None
-    createdAt: str | None
+    uuid: str
 
 
 class InvoiceCurrentActualsV2(BaseModel):
@@ -192,4 +200,3 @@ class ContractEntry(BaseModel):
     gcs_uri: str
     summaryData: ContractSummaryData
     uuid: str
-

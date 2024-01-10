@@ -91,7 +91,6 @@ async def get_all_vendors_from_agave(
     company_id: str, account_token: str | None = None
 ) -> Dict[str, Dict[str, List[dict] | dict]]:
     if not Config.AGAVE_ACCOUNT_TOKEN and not account_token:
-
         # TODO need a way to access which software is being integrated to include in the params for the secret id
         # secret_id = await create_secret_id(company_id)
         secret_id = f"AGAVE_{company_id.upper()}_QBD_ACCOUNT_TOKEN"
@@ -123,7 +122,6 @@ async def get_all_vendors_from_agave(
             message = list(response_message_dict.values())[0]
         raise HTTPException(status_code=response.status_code, detail=message)
 
-
     response_dict: Dict[str, List[dict] | dict] = json.loads(response.content)
     response_extra_dict: Dict[str, dict] = json.loads(response_extra.content)
 
@@ -146,7 +144,6 @@ def find_unique_entries(
     response_dict: Dict[str, List[dict] | dict],
     current_vendors_dict: Dict[str, Dict[str, dict]],
 ) -> Dict[str, List[dict]]:
-
     """
     Return only the unique values in the first dict by comparing to the second.
 
@@ -201,7 +198,6 @@ async def add_custom_fields(
         collection_name="vendors",
     )
     vendors_list = [vendor for vendor in all_vendors.values()]
-
 
     # traverse all vendors and pick out all unique names used
     unique_data_ext_names = set(
@@ -433,7 +429,7 @@ async def delete_vendors_from_qbd(agave_uuids: [str], vendor_ids: [str]):
             "message_agave_some": f"The following vendors were not deleted from QBD: {uuid_with_error}"
         }
 
-      
+
 async def ingest_qbd_items(account_token: str | None = None):
     """
     Ingest QBD items. Items require a type query to collect different item types.
@@ -564,7 +560,7 @@ async def init_ingest_all_qbd_data(
                     )
                 )
             )
-            
+
         if employees:
             push_func = (
                 push_qbd_data_to_firestore_batched
@@ -649,8 +645,8 @@ async def init_ingest_all_qbd_data(
                         project_name=PROJECT_NAME,
                         collection=company_id,
                         document="customers",
+                        data=return_customer_dict,
                     ),
-                    data=return_customer_dict,
                 )
             )
         if return_employee_dict:
@@ -660,10 +656,12 @@ async def init_ingest_all_qbd_data(
                         project_name=PROJECT_NAME,
                         collection=company_id,
                         document="employees",
+                        data=return_customer_dict,
                     ),
-                    data=return_customer_dict,
                 )
             )
+        _ = await asyncio.gather(*push_tasks)
+
         return {
             "message": "Account token and data saved succesfully.",
             "items": init_cost_codes_dict,

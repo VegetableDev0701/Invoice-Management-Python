@@ -249,14 +249,15 @@ async def create_files(
             )
 
         async with aiofiles.tempfile.NamedTemporaryFile("wb") as out_file:
+            print(out_file.name)
             content = await file.read()
             await out_file.write(content)
             blob = bucket.blob(f"{bucket_prefix}/{filename}")
-            upload_task = storage_utils.upload_blob_from_file_retry(
-                blob, out_file.name, file.content_type
+            _ = await storage_utils.upload_blob_from_file_retry(
+                blob=blob,
+                file_path=out_file.name,
+                content_type=file.content_type,
             )
-            upload_tasks.append(upload_task)
-    _ = await asyncio.gather(*upload_tasks)
 
     # Begin processing all documents
     await push_update_to_firestore(

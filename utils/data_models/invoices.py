@@ -55,6 +55,7 @@ class ProcessedInvoiceDataItem(BaseModel):
     change_order: NameWithId | None
     cost_code: str | None = None
     date_received: str | None = None
+    expense_tax: bool
     invoice_date: str | None = None
     invoice_id: str | None = None
     is_credit: bool

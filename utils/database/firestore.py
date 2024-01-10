@@ -18,6 +18,7 @@ from utils.retry_utils import RETRYABLE_EXCEPTIONS
 from global_vars.globals_invoice import PROJECT_DETAILS_MATCHING_KEYS
 from global_vars.globals_io import (
     BATCH_SIZE_CUTOFF,
+    COLLECTION_BATCH_SIZE,
     FIRESTORE_QUERY_BATCH_SIZE,
     INITIAL,
     JITTER,
@@ -106,6 +107,34 @@ async def fetch_document(coll, doc_name):
     return coll.id, doc_name, doc.to_dict()
 
 
+async def fetch_collections_batched(ref, doc_names, batch_size=10):
+    collections = ref.collections()
+    tasks, results = [], []
+
+    async for collection in collections:
+        # Add a task for each collection
+        if isinstance(doc_names, list):
+            for doc_name in doc_names:
+                task = asyncio.create_task(fetch_document(collection, doc_name))
+                tasks.append(task)
+        else:
+            task = asyncio.create_task(fetch_document(collection, doc_names))
+            tasks.append(task)
+
+        # If batch size is reached, wait for tasks to complete
+        if len(tasks) >= batch_size:
+            batch_results = await asyncio.gather(*tasks)
+            results.extend(batch_results)
+            tasks = []
+
+    # Fetch any remaining tasks
+    if tasks:
+        batch_results = await asyncio.gather(*tasks)
+        results.extend(batch_results)
+
+    return results
+
+
 async def get_all_project_details_data(
     project_name: str,
     collection_name: str,
@@ -117,18 +146,14 @@ async def get_all_project_details_data(
     details, contracts etc. This will pull all the details for any group needed.
     """
     db = firestore.AsyncClient(project=project_name)
-    tasks = []
     try:
         ref = db.collection(collection_name).document(document_name)
-        async for collection in ref.collections():
-            if isinstance(doc_names, list):
-                for doc_name in doc_names:
-                    task = asyncio.create_task(fetch_document(collection, doc_name))
-                    tasks.append(task)
-            else:
-                task = asyncio.create_task(fetch_document(collection, doc_names))
-                tasks.append(task)
-        results = await asyncio.gather(*tasks)
+
+        results = await fetch_collections_batched(
+            ref,
+            doc_names=doc_names,
+            batch_size=COLLECTION_BATCH_SIZE,  # protects against service unavailble errors from Firestore
+        )
 
         docs = {}
         for coll_id, doc_name, doc_data in results:
@@ -785,6 +810,7 @@ async def push_qbd_data_to_firestore(
 
 
 # TODO this function is has all fucked up naming convention and needs to be refactored if not rewritten
+# dont you just love an angry todo
 async def delete_collections_from_firestore(
     project_name: str,
     company_id: str,

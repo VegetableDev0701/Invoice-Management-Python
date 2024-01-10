@@ -262,7 +262,11 @@ async def get_storage_bucket(
 
 
 async def upload_blob_from_file_retry(
-    blob, file_path, content_type: str | None = None, initial: int = 5, jitter: int = 5
+    blob,
+    file_path,
+    content_type: str | None = None,
+    initial: int = 5,
+    jitter: int = 5,
 ) -> None:
     async for attempt in AsyncRetrying(
         stop=stop_after_attempt(RETRY_TIMES),  # Retry up to 3 times
@@ -278,6 +282,7 @@ async def upload_blob_from_file_retry(
                     blob.upload_from_filename, file_path, content_type=content_type
                 )
                 await loop.run_in_executor(None, upload_func)
+                
         except Exception as e:
             storage_utils_logger.exception(f"An error occurred uploading blob: {e}")
 
@@ -301,6 +306,7 @@ async def upload_blob_from_str_retry(
                     content_type="application/json",
                 )
                 await loop.run_in_executor(None, upload_func)
+                
         except Exception as e:
             storage_utils_logger.exception(f"An error occurred uploading blob: {e}")
 
