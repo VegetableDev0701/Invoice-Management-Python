@@ -43,7 +43,7 @@ async def create_files(
     project_id: str | None,
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(description="Uploading Contracts"),
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> Dict[str, str]:
     """
     Endpoint for uploading multiple files.
@@ -60,7 +60,7 @@ async def create_files(
     Returns:
         dict: A dictionary containing a message indicating the files were successfully uploaded.
     """
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
     bucket = await storage_utils.get_storage_bucket("stak-customer-documents")
 
     # Check for duplicate files
@@ -204,9 +204,9 @@ async def generate_signed_url(
     project_id: str,
     contract_id: str,
     filenames: List[str] = Query(None),
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> Dict[str, Union[List, str]]:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     expiration = datetime.timedelta(hours=1)
     expiration_datetime = datetime.datetime.utcnow() + expiration
@@ -233,9 +233,9 @@ async def delete_invoices(
     project_id: str,
     data: List[str],
     background_tasks: BackgroundTasks,
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> Dict[str, str]:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await push_update_to_firestore(
         project_name=PROJECT_NAME,
@@ -260,9 +260,9 @@ async def edit_contract(
     project_id: str,
     contract_id: str,
     data: ContractEntry,
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> Dict[str, str]:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await push_update_to_firestore(
         project_name=PROJECT_NAME,

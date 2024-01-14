@@ -130,6 +130,46 @@ class ProcessedInvoiceData1(BaseModel):
     vendor: NameWithId | None = None
     is_synced: str | None = None
 
+class PredictedSupplier(BaseModel):
+  supplier_name: str
+  isGPT: bool
+  agave_uuid: str | None
+  score: str | float | None
+  vendor_match_conf_score: float | None
+  uuid: str | None
+
+class InvoiceItemforSingle(BaseModel):
+    approved: bool
+    client_bill_id: str | None
+    currency: Entity | None
+    date_received: str
+    doc_id: str
+    document_type: str | None
+    gcs_img_uri: List[str]
+    gcs_uri: str
+    invoice_date: Entity | None
+    invoice_id: Entity | None
+    invoice_type: Entity | None
+    is_attached_to_bill: bool
+    line_items: List[Entity]
+    line_items_gpt: GPTLineItems | None
+    net_amount: Entity | None
+    number_of_pages: float
+    pages: List[Page]
+    payment_terms: Entity | None
+    processed: bool
+    predicted_supplier_name: PredictedSupplier | None
+    predicted_project: PredictedProject | None
+    processedData: ProcessedInvoiceDataItem
+    project: Project | None
+    project_id: str | None
+    receiver_address: Entity | None
+    receiver_name: Entity | None
+    supplier_address: Entity | None
+    supplier_id: str | None
+    supplier_name: Entity | None
+    total_amount: Entity | None
+    total_tax_amount: Entity | None
 
 class InvoiceItem(BaseModel):
     processedData: ProcessedInvoiceData1 | None = None

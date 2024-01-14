@@ -34,7 +34,7 @@ async def listen_to_firestore_invoice_updates(
     current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
     storage_client = storage.Client(project=PROJECT_NAME)
@@ -182,7 +182,7 @@ async def listen_to_firestore_contract_updates(
     current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
     storage_client = storage.Client(project=PROJECT_NAME)
@@ -313,7 +313,7 @@ async def listen_to_firestore_delete_invoices(
     current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
 
@@ -372,7 +372,7 @@ async def listen_to_firestore_delete_client_bill(
     current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
 
@@ -432,7 +432,7 @@ async def listen_to_firestore_delete_contract(
     current_user = await auth.get_current_user(auth0=f"Bearer {token}")
 
     # Check the user data
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     db = firestore.AsyncClient(project=PROJECT_NAME)
 

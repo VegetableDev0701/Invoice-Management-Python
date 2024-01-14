@@ -97,9 +97,9 @@ app.add_middleware(
 @app.get("/{company_id}/company-data")
 async def get_form_data(
     company_id: str,
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ):
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     doc = await get_all_company_data(
         project_name=PROJECT_NAME, collection_name=company_id
@@ -112,8 +112,9 @@ if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", 8000)),
+        port=int(os.environ.get("PORT", 80)),
         log_level="debug",
         reload=True,
         access_log=False,
     )
+ 

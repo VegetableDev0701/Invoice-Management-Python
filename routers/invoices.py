@@ -17,11 +17,12 @@ from fastapi import (
     UploadFile,
     File,
 )
-
+from config import PROJECT_NAME
 from utils.database.firestore import (
     stream_entire_collection,
     get_project_docs_from_firestore,
     push_update_to_firestore,
+    push_to_firestore,
     update_invoice_projects_in_firestore,
     update_processed_invoices_in_firestore,
     update_approved_invoice_in_firestore,
@@ -40,6 +41,7 @@ from utils.data_models.invoices import (
     InvoiceProjects,
     ProcessedInvoiceData,
     GPTLineItems,
+    InvoiceItemforSingle
 )
 from data_processing_pipeline import gcp_docai_utils as docai_async
 from validation import io_validation
@@ -85,9 +87,10 @@ router = APIRouter()
 
 @router.get("/{company_id}/get-all-invoices")
 async def get_all_invoices(
-    company_id: str, current_user=Depends(auth.get_current_user)
+    company_id: str, 
+    # current_user=Depends(auth.get_current_user)
 ) -> dict:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     invoices = await stream_entire_collection(
         project_name=PROJECT_NAME,
@@ -98,15 +101,37 @@ async def get_all_invoices(
 
     return invoices
 
+@router.post("/{compnay_id}/add-single-invoice")
+async def add_single_invoice(
+    compnay_id: str,
+    data: InvoiceItemforSingle,
+    # current_user=Depends(auth.get_current_user)
+) -> dict:
+    
+    # auth.check_user_data(compnay_id=compnay_id, current_user=current_user)
+
+    await push_to_firestore(
+        project_name=PROJECT_NAME,
+        collection=compnay_id,
+        data=data,
+        document="documents",
+        doc_collection=data.invoice_id,
+        doc_collection_document="processed_documents"
+    )
+
+    return {
+        "message": "Successfully added new Invoice",
+    }
+
 
 @router.get("/{company_id}/invoice/generate-signed-url")
 async def generate_signed_url(
     company_id: str,
     doc_id: str,
     filenames: List[str] = Query(None),
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> Dict[str, Union[List, str]]:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     expiration = datetime.timedelta(hours=1)
     expiration_datetime = datetime.datetime.utcnow() + expiration
@@ -134,7 +159,7 @@ async def create_files(
     company_id: str,
     background_tasks: BackgroundTasks,
     files: List[UploadFile] = File(description="Uploading Invoices"),
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> Dict[str, str]:
     """
     Endpoint for uploading multiple files.
@@ -150,7 +175,7 @@ async def create_files(
     Returns:
         dict: A dictionary containing a message indicating the files were successfully uploaded.
     """
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
     bucket = await storage_utils.get_storage_bucket(CUSTOMER_DOCUMENT_BUCKET)
 
     # Check for duplicate files
@@ -297,9 +322,9 @@ async def delete_invoices_endpoint(
     company_id: str,
     data: List[str],
     background_tasks: BackgroundTasks,
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ):
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await push_update_to_firestore(
         project_name=PROJECT_NAME,
@@ -318,9 +343,9 @@ async def delete_invoices_endpoint(
 async def update_invoice_project(
     company_id: str,
     invoices: InvoiceProjects,
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ):
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await update_invoice_projects_in_firestore(
         project_name=PROJECT_NAME,
@@ -339,9 +364,9 @@ async def update_invoice_project(
 async def update_invoice_data(
     company_id: str,
     data: ProcessedInvoiceData,
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> dict:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await update_processed_invoices_in_firestore(
         project_name=PROJECT_NAME,
@@ -385,9 +410,9 @@ async def remove_invoices_from_change_order(
     company_id: str,
     project_id: str,
     invoice_change_orders: Dict[str, List[str]],
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> dict:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     tasks = []
     for change_order_id, invoice_ids in invoice_change_orders.items():
@@ -420,9 +445,9 @@ async def add_gpt_line_items(
     company_id: str,
     invoice_id: str,
     data: GPTLineItems,
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> dict:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     new_dict = {}
     for key in data.__root__.keys():
@@ -445,9 +470,9 @@ async def approve_invoice(
     company_id: str,
     invoice_id: str,
     is_approved: bool,
-    current_user=Depends(auth.get_current_user),
+    # current_user=Depends(auth.get_current_user),
 ) -> dict:
-    auth.check_user_data(company_id=company_id, current_user=current_user)
+    # auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await update_approved_invoice_in_firestore(
         project_name=PROJECT_NAME,
@@ -466,7 +491,8 @@ async def approve_invoice(
 # May use this again in the future so keep it for now
 # @router.post("/{company_id}/cancel-upload")
 # async def cancel_task(
-#     company_id: str, task_id: str, current_user=Depends(auth.get_current_user)
+#     company_id: str, task_id: str, 
+    # current_user=Depends(auth.get_current_user)
 # ):
 #     #auth.check_user_data(company_id=company_id, current_user=current_user)
 #     print(background_tasks_dict)
