@@ -17,11 +17,15 @@ from utils.database.projects.utils import (
     add_client_bill_actuals,
     get_client_bill_current_actuals_from_firestore,
     update_client_bill_details,
+    push_to_firestore,
 )
 from utils.database.projects.client_bill_utils import (
     delete_client_bill_background,
 )
 from utils.data_models.projects import AddClientBillData, UpdateClientBillData
+from utils.data_models.invoices import (
+    InvoiceItemforSingle
+)
 from utils.database.projects.build_ar_invoice_utils import (
     get_agave_customer_id,
     build_ar_invoice_request_data,
@@ -82,6 +86,27 @@ async def update_client_bill(
     else:
         return {"message": "Successfully updated client bill."}
 
+@router.post("/{compnay_id}/single-client-bill-invoice")
+async def single_client_bill_invoice(
+    company_id: str,
+    project_id: str,
+    client_bill_id: str,
+    data: InvoiceItemforSingle
+) -> dict:
+    # auth.check_user_data(compnay_id=compnay_id, current_user=current_user)
+
+    await push_to_firestore(
+        project_name=PROJECT_NAME,
+        collection=company_id,
+        data=data,
+        document="client-bills",
+        doc_collection=data.client_bill_id,
+        doc_collection_document="current-actuals"
+    )
+
+    return {
+        "message": "Successfully added new Invoice",
+    }
 
 @router.post("/{company_id}/add-client-bill")
 async def add_client_bill(
