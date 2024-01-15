@@ -39,8 +39,7 @@ router = APIRouter()
 
 @router.get("/{company_id}/get-all-vendors")
 async def get_projects_data(
-    company_id: str, 
-    # current_user=Depends(auth.get_current_user)
+    company_id: str, current_user=Depends(auth.get_current_user)
 ) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
@@ -160,8 +159,7 @@ async def update_vendor(
 
 @router.delete("/{company_id}/delete-vendors")
 async def delete_vendor(
-    company_id: str, data: List[str], 
-    # current_user=Depends(auth.get_current_user)
+    company_id: str, data: List[str], current_user=Depends(auth.get_current_user)
 ):
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
@@ -191,8 +189,7 @@ async def delete_vendor(
 
 @router.get("/{company_id}/get-vendors-agave")
 async def get_vendors_agave(
-    company_id: str, 
-    # current_user=Depends(auth.get_current_user)
+    company_id: str, current_user=Depends(auth.get_current_user)
 ) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 

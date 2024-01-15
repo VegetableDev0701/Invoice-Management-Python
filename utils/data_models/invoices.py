@@ -138,7 +138,7 @@ class PredictedSupplier(BaseModel):
   vendor_match_conf_score: float | None
   uuid: str | None
 
-class InvoiceItemforSingle(BaseModel):
+class InvoiceItemForSingle(BaseModel):
     approved: bool
     client_bill_id: str | None
     currency: Entity | None

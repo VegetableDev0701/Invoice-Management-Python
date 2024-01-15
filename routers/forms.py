@@ -11,7 +11,7 @@ router = APIRouter()
 @router.get("/{company_id}/all-forms")
 async def get_forms(
     company_id: str, 
-    # current_user=Depends(auth.get_current_user)
+    current_user=Depends(auth.get_current_user)
 ) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 

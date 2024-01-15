@@ -41,7 +41,7 @@ from utils.data_models.invoices import (
     InvoiceProjects,
     ProcessedInvoiceData,
     GPTLineItems,
-    InvoiceItemforSingle
+    InvoiceItemForSingle
 )
 from data_processing_pipeline import gcp_docai_utils as docai_async
 from validation import io_validation
@@ -88,7 +88,7 @@ router = APIRouter()
 @router.get("/{company_id}/get-all-invoices")
 async def get_all_invoices(
     company_id: str, 
-    # current_user=Depends(auth.get_current_user)
+    current_user=Depends(auth.get_current_user)
 ) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
@@ -101,18 +101,18 @@ async def get_all_invoices(
 
     return invoices
 
-@router.post("/{compnay_id}/add-single-invoice")
+@router.post("/{company_id}/add-single-invoice")
 async def add_single_invoice(
-    compnay_id: str,
-    data: InvoiceItemforSingle,
-    # current_user=Depends(auth.get_current_user)
+    company_id: str,
+    data: InvoiceItemForSingle,
+    current_user=Depends(auth.get_current_user)
 ) -> dict:
     
-    # auth.check_user_data(compnay_id=compnay_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await push_to_firestore(
         project_name=PROJECT_NAME,
-        collection=compnay_id,
+        collection=company_id,
         data=data,
         document="documents",
         doc_collection=data.invoice_id,
@@ -491,8 +491,7 @@ async def approve_invoice(
 # May use this again in the future so keep it for now
 # @router.post("/{company_id}/cancel-upload")
 # async def cancel_task(
-#     company_id: str, task_id: str, 
-    # current_user=Depends(auth.get_current_user)
+#     company_id: str, task_id: str, current_user=Depends(auth.get_current_user)
 # ):
 #     #auth.check_user_data(company_id=company_id, current_user=current_user)
 #     print(background_tasks_dict)

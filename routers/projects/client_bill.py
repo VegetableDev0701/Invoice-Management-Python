@@ -24,7 +24,7 @@ from utils.database.projects.client_bill_utils import (
 )
 from utils.data_models.projects import AddClientBillData, UpdateClientBillData
 from utils.data_models.invoices import (
-    InvoiceItemforSingle
+    InvoiceItemForSingle
 )
 from utils.database.projects.build_ar_invoice_utils import (
     get_agave_customer_id,
@@ -91,7 +91,7 @@ async def single_client_bill_invoice(
     company_id: str,
     project_id: str,
     client_bill_id: str,
-    data: InvoiceItemforSingle
+    data: InvoiceItemForSingle
 ) -> dict:
     auth.check_user_data(compnay_id=compnay_id, current_user=current_user)
 
@@ -180,7 +180,7 @@ async def build_ar_invoice(
 
     if not Config.AGAVE_ACCOUNT_TOKEN:
         # TODO need a way to access which software is being integrated to include in the params for the secret id
-        secret_id = await create_secret_id(company_id)
+        # secret_id = await create_secret_id(company_id)
         secret_id = f"AGAVE_{company_id.upper()}_QBD_ACCOUNT_TOKEN"
         Config.AGAVE_ACCOUNT_TOKEN = await access_secret_version(secret_id=secret_id)
 

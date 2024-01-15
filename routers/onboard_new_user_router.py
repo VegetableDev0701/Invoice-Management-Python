@@ -14,8 +14,7 @@ router = APIRouter()
 
 @router.put("/onboard_new_user")
 async def check_users_email_domain(
-    user_email: str, 
-    # current_user=Depends(auth.get_current_user)
+    user_email: str, current_user=Depends(auth.get_current_user)
 ) -> Dict[str, Any]:
     domain = user_email.split("@")[-1]
 
@@ -26,8 +25,7 @@ async def check_users_email_domain(
 
 @router.get("/check_user_email")
 async def check_user_email_route(
-    user_email: str, 
-    # current_user=Depends(auth.get_current_user)
+    user_email: str, current_user=Depends(auth.get_current_user)
 ):
     is_part_of_org = await check_user_email(user_email=user_email)
     return {"message": is_part_of_org}
@@ -35,8 +33,7 @@ async def check_user_email_route(
 
 @router.patch("/update_new_user_info")
 async def update_company_name(
-    data: UpdateUserInfo, 
-    # current_user=Depends(auth.get_current_user)
+    data: UpdateUserInfo, current_user=Depends(auth.get_current_user)
 ) -> dict:
     company_id = data.company_id
     company_name = data.company_name

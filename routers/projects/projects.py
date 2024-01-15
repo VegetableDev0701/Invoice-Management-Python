@@ -27,8 +27,7 @@ router = APIRouter()
 
 @router.get("/{company_id}/get-all-projects-data")
 async def get_all_active_projects_data(
-    company_id: str, 
-    # current_user=Depends(auth.get_current_user)
+    company_id: str, current_user=Depends(auth.get_current_user)
 ) -> str:
     """
     Fetches all project details data for all companies.
@@ -55,8 +54,7 @@ async def get_all_active_projects_data(
 
 @router.get("/{company_id}/get-all-project-data")
 async def get_all_project_data(
-    company_id: str, project_id: str, 
-    # current_user=Depends(auth.get_current_user)
+    company_id: str, project_id: str, current_user=Depends(auth.get_current_user)
 ) -> str | None:
     """
     Fetches all data related to a specific project for a given company.
@@ -247,8 +245,7 @@ async def change_project_status(
 
 @router.delete("/{company_id}/delete-projects")
 async def delete_project(
-    company_id: str, data: List[str], 
-    # current_user=Depends(auth.get_current_user)
+    company_id: str, data: List[str], current_user=Depends(auth.get_current_user)
 ) -> dict:
     """
     Deletes specific projects of a given company.
