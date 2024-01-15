@@ -87,8 +87,7 @@ router = APIRouter()
 
 @router.get("/{company_id}/get-all-invoices")
 async def get_all_invoices(
-    company_id: str, 
-    current_user=Depends(auth.get_current_user)
+    company_id: str, current_user=Depends(auth.get_current_user)
 ) -> dict:
     auth.check_user_data(company_id=company_id, current_user=current_user)
 
