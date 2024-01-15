@@ -97,9 +97,9 @@ app.add_middleware(
 @app.get("/{company_id}/company-data")
 async def get_form_data(
     company_id: str,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     doc = await get_all_company_data(
         project_name=PROJECT_NAME, collection_name=company_id

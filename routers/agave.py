@@ -23,9 +23,9 @@ async def get_and_save_agave_account_token(
     company_id: str,
     public_token: str,
     software_name: str,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     headers = {
         "API-Version": Config.AGAVE_API_VERSION,

@@ -18,9 +18,9 @@ async def update_budget(
     company_id: str,
     project_id: str,
     data: ProjectBudget,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await push_to_firestore(
         project_name=PROJECT_NAME,
@@ -38,9 +38,9 @@ async def update_budget(
 async def update_all_budgets(
     company_id: str,
     data: List[UpdateCostCode],
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await project_utils.update_all_project_budgets(
         project_name=PROJECT_NAME,

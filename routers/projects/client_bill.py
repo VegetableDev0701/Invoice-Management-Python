@@ -41,9 +41,9 @@ async def get_client_bill(
     project_id: str,
     client_bill_id: str,
     is_only_current_actuals: str,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     if is_only_current_actuals == "true":
         current_actuals = await get_client_bill_current_actuals_from_firestore(
@@ -69,9 +69,9 @@ async def update_client_bill(
     project_id: str,
     client_bill_id: str,
     data: UpdateClientBillData,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     return_data = await update_client_bill_details(
         project_name=PROJECT_NAME,
@@ -93,7 +93,7 @@ async def single_client_bill_invoice(
     client_bill_id: str,
     data: InvoiceItemforSingle
 ) -> dict:
-    # auth.check_user_data(compnay_id=compnay_id, current_user=current_user)
+    auth.check_user_data(compnay_id=compnay_id, current_user=current_user)
 
     await push_to_firestore(
         project_name=PROJECT_NAME,
@@ -114,9 +114,9 @@ async def add_client_bill(
     project_id: str,
     client_bill_id: str,
     data: AddClientBillData,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     if (
         data.currentActuals is not None
@@ -160,9 +160,9 @@ async def build_ar_invoice(
     project_id: str,
     client_bill_id: str,
     data: CustomerInfo,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
     customer_name = data.customerName
     customer_email = data.customerEmail
 
@@ -180,7 +180,7 @@ async def build_ar_invoice(
 
     if not Config.AGAVE_ACCOUNT_TOKEN:
         # TODO need a way to access which software is being integrated to include in the params for the secret id
-        # secret_id = await create_secret_id(company_id)
+        secret_id = await create_secret_id(company_id)
         secret_id = f"AGAVE_{company_id.upper()}_QBD_ACCOUNT_TOKEN"
         Config.AGAVE_ACCOUNT_TOKEN = await access_secret_version(secret_id=secret_id)
 
@@ -231,9 +231,9 @@ async def delete_client_bills(
     project_id: str,
     data: List[str],
     background_tasks: BackgroundTasks,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await push_update_to_firestore(
         project_name=PROJECT_NAME,

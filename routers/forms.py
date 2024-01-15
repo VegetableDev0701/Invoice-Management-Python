@@ -13,7 +13,7 @@ async def get_forms(
     company_id: str, 
     # current_user=Depends(auth.get_current_user)
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     form_docs = await stream_entire_collection(
         project_name=PROJECT_NAME,

@@ -42,7 +42,7 @@ async def get_projects_data(
     company_id: str, 
     # current_user=Depends(auth.get_current_user)
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     doc = await get_all_project_details_data(
         project_name=PROJECT_NAME,
@@ -59,9 +59,9 @@ async def get_projects_data(
 async def add_vendor(
     company_id: str,
     data: FullVendorDataToAdd,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     # Both the new project and a summary of that projects data come in at the same time
     full_data = data.fullData
@@ -111,9 +111,9 @@ async def update_vendor(
     company_id: str,
     vendor_id: str,
     data: FullVendorDataToAdd,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
     full_data = data.fullData
     new_summary_data = data.summaryData
 
@@ -163,7 +163,7 @@ async def delete_vendor(
     company_id: str, data: List[str], 
     # current_user=Depends(auth.get_current_user)
 ):
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     agave_uuids = await get_agave_uuid_from_vendor_id(
         vendor_ids=data,
@@ -194,7 +194,7 @@ async def get_vendors_agave(
     company_id: str, 
     # current_user=Depends(auth.get_current_user)
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     get_vendors_agave_task = get_all_vendors_from_agave(company_id)
 
@@ -256,9 +256,9 @@ async def get_vendors_agave(
 async def sync_vendors_agave(
     company_id: str,
     data: Dict[str, SummaryVendorData],
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ):
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     tasks = []
 

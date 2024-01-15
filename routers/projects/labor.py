@@ -18,9 +18,9 @@ async def add_labor(
     company_id: str,
     project_id: str,
     data: FullLaborDataToAdd,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     full_data = data.fullData
     new_summary_data = data.summaryData
@@ -54,9 +54,9 @@ async def update_labor(
     project_id: str,
     labor_id: str,
     data: FullLaborDataToAdd,
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     full_data = data.fullData
     new_summary_data = data.summaryData
@@ -90,9 +90,9 @@ async def delete_labor(
     company_id: str,
     project_id: str,
     data: List[str],
-    # current_user=Depends(auth.get_current_user),
+    current_user=Depends(auth.get_current_user),
 ) -> dict:
-    # auth.check_user_data(company_id=company_id, current_user=current_user)
+    auth.check_user_data(company_id=company_id, current_user=current_user)
 
     await delete_project_items_from_firestore(
         project_name=PROJECT_NAME,
