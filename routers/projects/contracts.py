@@ -18,7 +18,7 @@ from fastapi import (
 )
 
 from utils.database.firestore import push_update_to_firestore
-
+from utils.database.firestore import add_project_single_contract_in_firestore
 from utils.data_models.projects import ContractEntry
 from utils.contract_helpers import delete_contracts_wrapper
 from config import Config, PROJECT_NAME, CUSTOMER_DOCUMENT_BUCKET
@@ -274,3 +274,21 @@ async def edit_contract(
     )
 
     return {"message": "Successfully updated the contract"}
+
+@router.post("/{company_id}/add-single-contract")
+async def add_single_contract(
+    company_id: str,
+    project_id: str,
+    data: ContractEntry,
+    current_user= Depends(auth.get_current_user),
+) -> dict:
+    auth.check_user_data(company_id=company_id, current_user=current_user)
+    
+    await add_project_single_contract_in_firestore(
+        company_id=company_id,
+        project_id=project_id,
+        uuid=data.uuid,
+        data=data
+    )
+    
+    return {"message": "Successfully added Contract"}

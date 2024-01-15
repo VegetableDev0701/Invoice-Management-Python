@@ -1183,7 +1183,43 @@ async def add_gpt_line_items_to_invoice_data_in_firestore(
         raise
     finally:
         db.close()
-
+        
+async def add_project_single_contract_in_firestore(
+    company_id: str,
+    project_id: str,
+    uuid: str,
+    data: dict,
+) -> None: 
+    db = firestore.AsyncClient(project=project_id)
+    try:
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(RETRY_TIMES),
+            wait=wait_exponential_jitter(initial=initial, jitter=jitter),
+            retry=retry_if_exception_type(RETRYABLE_EXCEPTIONS),
+            reraise=True,
+            before_sleep=before_sleep_log(firestore_io_logger, logging.DEBUG),
+        ):
+            with attempt:
+                new_contract = (
+                    db.collection(company_id)
+                    .document('project')
+                    .collection(project_id)
+                    .collection('contract')
+                    .document(uuid)
+                )
+                await new_contract.set(data)
+    except RetryError as e:
+        firestore_io_logger.error(
+            f"{e} occured while adding new single contract to firestore. "
+        )
+        raise
+    except Exception as e:
+        firestore_io_logger.exception(
+            f"Unexpected error occured while adding single contract to firestore. "
+        )
+        raise
+    finally:
+        db.close
 
 async def update_approved_invoice_in_firestore(
     project_name: str,
