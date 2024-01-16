@@ -1,8 +1,8 @@
 # from enum import Enum
 LOCATION = "us"  # Format is 'us' or 'eu'
-INVOICE_PROCESSOR_ID = "df7c4c73a98f8576"
-RECEIPT_PROCESSOR_ID = "5c1964f3784a983e"
-OCR_PROCESSOR_ID = "a181da6cfda5fe8e"  # ocr processor
+INVOICE_PROCESSOR_ID = ""
+RECEIPT_PROCESSOR_ID = ""
+OCR_PROCESSOR_ID = ""  # ocr processor
 
 GCS_OUTPUT_BUCKET = "gs://stak-customer-documents"
 STAK_CUSTOMER_DOCUMENTS_BUCKET = "stak-customer-documents"
